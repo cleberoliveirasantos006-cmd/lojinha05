@@ -23,22 +23,27 @@ async function renderizarInicio() {
   const alvo = document.getElementById("listaProfissionais");
   if (!alvo) return;
   const profs = await api("/api/profissionais");
-  alvo.innerHTML = profs.map(p => `
-    <article class="seller-card">
-      <div class="seller-cover ${p.cor || 'rose'}">
-        <span class="cover-flower">✿</span>
-        <div class="avatar">${p.inicial || p.nome[0]}</div>
-      </div>
-      <div class="seller-card-body">
-        <span class="eyebrow">${p.area || ''}</span>
-        <h3>${p.nome}</h3>
-        <p>📍 ${p.cidade || ''}</p>
-        <p class="seller-description">${p.bio || ''}</p>
-        <a class="btn btn-primary btn-full" href="/vendedor.html?vendedor=${p.slug}">
-          Conhecer profissional →
-        </a>
-      </div>
-    </article>`).join("");
+  alvo.innerHTML = profs.map(p => {
+    const coverStyle = p.imagem_url
+      ? `background-image:url('${p.imagem_url}');background-size:cover;background-position:center;`
+      : "";
+    const coverInner = p.imagem_url
+      ? ""
+      : `<span class="cover-flower">✿</span><div class="avatar">${p.inicial || p.nome[0]}</div>`;
+    return `
+      <article class="seller-card">
+        <div class="seller-cover ${p.cor || 'rose'}" style="${coverStyle}">${coverInner}</div>
+        <div class="seller-card-body">
+          <span class="eyebrow">${p.area || ''}</span>
+          <h3>${p.nome}</h3>
+          <p>📍 ${p.cidade || ''}</p>
+          <p class="seller-description">${p.bio || ''}</p>
+          <a class="btn btn-primary btn-full" href="/vendedor.html?vendedor=${p.slug}">
+            Conhecer profissional →
+          </a>
+        </div>
+      </article>`;
+  }).join("");
 }
 
 // =====================================================
@@ -55,12 +60,16 @@ async function renderizarVendedor() {
   vendedorAtual = await api(`/api/profissionais/${slug}`);
   document.title = vendedorAtual.nome + " | Amora Beauty";
 
+  const coverStyle = vendedorAtual.imagem_url
+    ? `background-image:url('${vendedorAtual.imagem_url}');background-size:cover;background-position:center;`
+    : "";
+  const coverInner = vendedorAtual.imagem_url
+    ? ""
+    : `<span class="cover-flower">✿</span><div class="avatar">${vendedorAtual.inicial || vendedorAtual.nome[0]}</div>`;
+
   perfilEl.innerHTML = `
     <section class="seller-hero">
-      <div class="seller-cover large ${vendedorAtual.cor || 'rose'}">
-        <span class="cover-flower">✿</span>
-        <div class="avatar">${vendedorAtual.inicial || vendedorAtual.nome[0]}</div>
-      </div>
+      <div class="seller-cover large ${vendedorAtual.cor || 'rose'}" style="${coverStyle}">${coverInner}</div>
       <div class="seller-hero-text">
         <span class="eyebrow">${vendedorAtual.area || ''}</span>
         <h1>${vendedorAtual.nome}</h1>
@@ -88,18 +97,24 @@ async function renderizarVendedor() {
   document.getElementById("dataAgenda").min = new Date().toISOString().split("T")[0];
   document.getElementById("formAgendamento").addEventListener("submit", solicitarAgendamento);
 
-  document.getElementById("listaProdutos").innerHTML = vendedorAtual.produtos.map(p => `
-    <article class="product-card">
-      <div class="product-art">${p.emoji || "🎀"}</div>
-      <div class="product-card-body">
-        <h3>${p.nome}</h3>
-        <p>${p.descricao || ""}</p>
-        <strong>${moeda(p.preco)}</strong>
-        <button class="btn btn-outline btn-full" onclick="adicionarProduto(${p.id})">
-          Adicionar à sacolinha
-        </button>
-      </div>
-    </article>`).join("");
+  document.getElementById("listaProdutos").innerHTML = vendedorAtual.produtos.map(p => {
+    const artStyle = p.imagem_url
+      ? `background-image:url('${p.imagem_url}');background-size:cover;background-position:center;color:transparent;`
+      : "";
+    const artInner = p.imagem_url ? "" : (p.emoji || "🎀");
+    return `
+      <article class="product-card">
+        <div class="product-art" style="${artStyle}">${artInner}</div>
+        <div class="product-card-body">
+          <h3>${p.nome}</h3>
+          <p>${p.descricao || ""}</p>
+          <strong>${moeda(p.preco)}</strong>
+          <button class="btn btn-outline btn-full" onclick="adicionarProduto(${p.id})">
+            Adicionar à sacolinha
+          </button>
+        </div>
+      </article>`;
+  }).join("");
 
   document.getElementById("finalizarCompra").addEventListener("click", finalizarCompra);
 }
@@ -131,7 +146,7 @@ async function solicitarAgendamento(e) {
   const observacao = document.getElementById("observacao").value;
 
   try {
-    const r = await api("/api/agendamentos", {
+    await api("/api/agendamentos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
