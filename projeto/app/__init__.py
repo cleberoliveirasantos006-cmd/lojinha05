@@ -11,7 +11,7 @@ def create_app():
     CORS(app, supports_credentials=True, origins=["*"])
 
     db.init_app(app)
-    migrate.init_app(app, db)
+    migrate.init_app(app, db)          # mantido para uso local, mas não obrigatório
     login_manager.init_app(app)
 
     from app.auth.routes import auth_bp
@@ -23,6 +23,15 @@ def create_app():
 
     for bp in (auth_bp, prof_bp, ag_bp, ord_bp, cli_bp, admin_bp):
         app.register_blueprint(bp)
+
+    # ------------------------------------------------------------
+    # Cria automaticamente as tabelas que ainda não existem no banco.
+    # Substitui o "flask db upgrade" no Render (plano Free não tem Shell).
+    # NÃO altera tabelas já existentes — só cria as que faltam.
+    # ------------------------------------------------------------
+    with app.app_context():
+        from app import models  # garante que todos os modelos sejam registrados
+        db.create_all()
 
     @app.route("/")
     def home():
