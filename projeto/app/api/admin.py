@@ -19,7 +19,7 @@ def listar_lojas():
     return jsonify([{
         "id": s.id, "slug": s.slug, "nome": s.nome, "area": s.area,
         "cidade": s.cidade, "email_notificacao": s.email_notificacao,
-        "ativo": s.ativo,
+        "ativo": s.ativo, "imagem_url": s.imagem_url,
     } for s in q.all()])
 
 
@@ -39,6 +39,7 @@ def criar_loja():
         cidade=d.get("cidade"), bio=d.get("bio"), inicial=d.get("inicial"),
         cor=d.get("cor"), instagram=d.get("instagram"),
         whatsapp=d.get("whatsapp"), email_notificacao=d["email_notificacao"],
+        imagem_url=d.get("imagem_url"),
     )
     db.session.add(s)
     db.session.commit()
@@ -53,7 +54,8 @@ def editar_loja(store_id):
     s = Store.query.get_or_404(store_id)
     d = request.get_json() or {}
     for campo in ("nome", "area", "cidade", "bio", "inicial", "cor",
-                  "instagram", "whatsapp", "email_notificacao", "ativo"):
+                  "instagram", "whatsapp", "email_notificacao", "ativo",
+                  "imagem_url"):
         if campo in d:
             setattr(s, campo, d[campo])
     db.session.commit()
@@ -115,7 +117,7 @@ def criar_produto(store_id):
         return jsonify(error="nome e preco obrigatórios"), 400
     p = Product(store_id=store_id, nome=d["nome"],
                 descricao=d.get("descricao"), preco=d["preco"],
-                emoji=d.get("emoji"))
+                emoji=d.get("emoji"), imagem_url=d.get("imagem_url"))
     db.session.add(p)
     db.session.commit()
     return jsonify(id=p.id), 201
@@ -211,13 +213,10 @@ def listar_usuarios():
     q = User.query
     if role:
         q = q.filter_by(role=role)
-
-    # Admin de loja só vê admins da própria loja
     if current_user.store_id:
         q = q.filter(
             (User.store_id == current_user.store_id) | (User.id == current_user.id)
         )
-
     return jsonify([{
         "id": u.id, "username": u.username, "email": u.email,
         "role": u.role, "store_id": u.store_id,
@@ -228,12 +227,6 @@ def listar_usuarios():
 @admin_bp.post("/usuarios")
 @admin_required
 def criar_admin():
-    """
-    Cria um novo admin.
-    - Admin de loja (store_id != None): só cria admin para a própria loja.
-    - Super-admin (store_id == None): cria admin de qualquer loja
-      ou outro super-admin (deixando store_slug vazio).
-    """
     d = request.get_json() or {}
     username = (d.get("username") or "").strip()
     password = d.get("password") or ""
@@ -242,7 +235,6 @@ def criar_admin():
 
     if not username or len(password) < 6:
         return jsonify(error="username e password (mín. 6) obrigatórios"), 400
-
     if User.query.filter_by(username=username).first():
         return jsonify(error="Usuário já existe"), 409
 
@@ -253,7 +245,6 @@ def criar_admin():
             return jsonify(error="Loja não encontrada"), 404
         store_id = store.id
 
-    # Admin de loja só cria admin da própria loja
     if current_user.store_id is not None and store_id != current_user.store_id:
         return jsonify(error="Só é possível criar admin da própria loja"), 403
 
@@ -267,16 +258,13 @@ def criar_admin():
 @admin_bp.patch("/usuarios/me/senha")
 @admin_required
 def trocar_minha_senha():
-    """Cada admin troca APENAS a própria senha, informando a atual."""
     d = request.get_json() or {}
     senha_atual = d.get("senha_atual") or ""
     nova_senha = d.get("nova_senha") or ""
-
     if not current_user.check_password(senha_atual):
         return jsonify(error="Senha atual incorreta"), 400
     if len(nova_senha) < 6:
         return jsonify(error="Nova senha deve ter no mínimo 6 caracteres"), 400
-
     current_user.set_password(nova_senha)
     db.session.commit()
     return jsonify(ok=True)
@@ -285,23 +273,15 @@ def trocar_minha_senha():
 @admin_bp.patch("/usuarios/<int:user_id>/senha")
 @admin_required
 def redefinir_senha_de_outro(user_id):
-    """
-    Super-admin pode redefinir a senha de qualquer admin
-    (útil em caso de perda). Admin de loja NÃO pode.
-    Cada admin troca a sua via /me/senha.
-    """
     if not current_user.is_super_admin:
         return jsonify(error="Apenas super-admin pode redefinir senha de outro admin"), 403
-
     alvo = User.query.get_or_404(user_id)
     if alvo.role != "admin":
         return jsonify(error="Alvo não é admin"), 400
-
     d = request.get_json() or {}
     nova = d.get("nova_senha") or ""
     if len(nova) < 6:
         return jsonify(error="Nova senha deve ter no mínimo 6 caracteres"), 400
-
     alvo.set_password(nova)
     db.session.commit()
     return jsonify(ok=True)
@@ -310,16 +290,13 @@ def redefinir_senha_de_outro(user_id):
 @admin_bp.delete("/usuarios/<int:user_id>")
 @admin_required
 def deletar_admin(user_id):
-    """Apenas super-admin deleta admins. Não pode deletar a si mesmo."""
     if not current_user.is_super_admin:
         return jsonify(error="Apenas super-admin pode deletar admins"), 403
     if user_id == current_user.id:
         return jsonify(error="Você não pode deletar a si mesmo"), 400
-
     alvo = User.query.get_or_404(user_id)
     if alvo.role != "admin":
         return jsonify(error="Alvo não é admin"), 400
-
     db.session.delete(alvo)
     db.session.commit()
     return jsonify(ok=True)
