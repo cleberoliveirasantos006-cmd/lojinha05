@@ -9,6 +9,7 @@ def _store_to_dict(s, incluir_itens=True):
         "id": s.id, "slug": s.slug, "nome": s.nome, "area": s.area,
         "cidade": s.cidade, "bio": s.bio, "inicial": s.inicial, "cor": s.cor,
         "instagram": s.instagram, "whatsapp": s.whatsapp,
+        "imagem_url": s.imagem_url,
     }
     if incluir_itens:
         data["servicos"] = [
@@ -17,7 +18,8 @@ def _store_to_dict(s, incluir_itens=True):
         ]
         data["produtos"] = [
             {"id": p.id, "nome": p.nome, "descricao": p.descricao,
-             "preco": float(p.preco), "emoji": p.emoji}
+             "preco": float(p.preco), "emoji": p.emoji,
+             "imagem_url": p.imagem_url}
             for p in s.produtos
         ]
     return data
