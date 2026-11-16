@@ -36,6 +36,7 @@
 
     <section id="tab-agendamentos" class="tab-panel"><div id="listaAgendamentos" class="stack"></div></section>
     <section id="tab-pedidos" class="tab-panel" hidden><div id="listaPedidos" class="stack"></div></section>
+
     <section id="tab-lojas" class="tab-panel" hidden>
       <form id="formLoja" class="form-card">
         <h3>Nova loja</h3>
@@ -49,6 +50,7 @@
       </form>
       <div id="listaLojas" class="stack"></div>
     </section>
+
     <section id="tab-servicos" class="tab-panel" hidden>
       <form id="formServico" class="form-card">
         <h3>Novo serviço</h3>
@@ -60,6 +62,7 @@
       </form>
       <div id="listaServicos" class="stack"></div>
     </section>
+
     <section id="tab-produtos" class="tab-panel" hidden>
       <form id="formProduto" class="form-card">
         <h3>Novo produto</h3>
@@ -72,6 +75,7 @@
       </form>
       <div id="listaProdutos" class="stack"></div>
     </section>
+
     <section id="tab-admins" class="tab-panel" hidden>
       <form id="formAdmin" class="form-card">
         <h3>Criar novo admin</h3>
@@ -83,6 +87,7 @@
       </form>
       <div id="listaAdmins" class="stack"></div>
     </section>
+
     <section id="tab-senha" class="tab-panel" hidden>
       <form id="formSenha" class="form-card">
         <h3>Trocar minha senha</h3>
@@ -120,7 +125,7 @@
         .finally(() => { localStorage.removeItem("logado"); location.href = "/index.html"; });
     }
 
-    // ---- Abas ----
+    // ==================== ABAS ====================
     document.querySelectorAll(".tab").forEach(btn => {
       btn.addEventListener("click", () => {
         document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
@@ -137,7 +142,7 @@
       });
     });
 
-    // ---- Agendamentos ----
+    // ==================== AGENDAMENTOS ====================
     async function carregarAgendamentos() {
       const ags = await api("/api/admin/agendamentos");
       const alvo = document.getElementById("listaAgendamentos");
@@ -171,7 +176,7 @@
       carregarAgendamentos();
     }
 
-    // ---- Pedidos ----
+    // ==================== PEDIDOS ====================
     async function carregarPedidos() {
       const ps = await api("/api/admin/pedidos");
       const alvo = document.getElementById("listaPedidos");
@@ -203,7 +208,7 @@
       carregarPedidos();
     }
 
-    // ---- Lojas ----
+    // ==================== LOJAS ====================
     async function carregarLojas() {
       const lojas = await api("/api/admin/lojas");
       const box = document.getElementById("listaLojas");
@@ -216,8 +221,33 @@
           <p><strong>Slug:</strong> ${l.slug}</p>
           <p><strong>E-mail:</strong> ${l.email_notificacao}</p>
           <p><strong>Cidade:</strong> ${l.cidade || "-"}</p>
+          <div class="acoes">
+            <button class="btn btn-outline btn-small" onclick="alternarLoja(${l.id}, ${l.ativo})">
+              ${l.ativo ? "Desativar" : "Reativar"}
+            </button>
+            <button class="btn btn-outline btn-small" onclick="removerLoja(${l.id})">Remover loja</button>
+          </div>
         </article>`).join("") || '<div class="empty-state">Nenhuma loja.</div>';
     }
+
+    async function alternarLoja(id, ativoAtual) {
+      try {
+        await api(`/api/admin/lojas/${id}`, {
+          method: "PUT", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ ativo: !ativoAtual }),
+        });
+        carregarLojas();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function removerLoja(id) {
+      if (!confirm("Remover esta loja? Isso apaga também serviços, produtos, agendamentos e pedidos dela.")) return;
+      try {
+        await api(`/api/admin/lojas/${id}`, { method: "DELETE" });
+        carregarLojas();
+      } catch (err) { alert(err.message); }
+    }
+
     document.getElementById("formLoja").addEventListener("submit", async e => {
       e.preventDefault();
       try {
@@ -236,14 +266,14 @@
       } catch (err) { alert(err.message); }
     });
 
-    // ---- Select de lojas ----
+    // ==================== SELECT DE LOJAS ====================
     async function carregarSelectLojas(id) {
       const lojas = await api("/api/admin/lojas");
       const sel = document.getElementById(id);
       sel.innerHTML = lojas.map(l => `<option value="${l.id}">${l.nome}</option>`).join("");
     }
 
-    // ---- Serviços ----
+    // ==================== SERVIÇOS ====================
     async function carregarServicos() {
       const lojas = await api("/api/admin/lojas");
       const partes = [];
@@ -275,11 +305,13 @@
     });
     async function removerServico(id) {
       if (!confirm("Remover este serviço?")) return;
-      await api(`/api/admin/servicos/${id}`, { method: "DELETE" });
-      carregarServicos();
+      try {
+        await api(`/api/admin/servicos/${id}`, { method: "DELETE" });
+        carregarServicos();
+      } catch (err) { alert(err.message); }
     }
 
-    // ---- Produtos ----
+    // ==================== PRODUTOS ====================
     async function carregarProdutos() {
       const lojas = await api("/api/admin/lojas");
       const partes = [];
@@ -312,11 +344,13 @@
     });
     async function removerProduto(id) {
       if (!confirm("Remover este produto?")) return;
-      await api(`/api/admin/produtos/${id}`, { method: "DELETE" });
-      carregarProdutos();
+      try {
+        await api(`/api/admin/produtos/${id}`, { method: "DELETE" });
+        carregarProdutos();
+      } catch (err) { alert(err.message); }
     }
 
-    // ---- Admins ----
+    // ==================== ADMINS ====================
     async function carregarAdmins() {
       const admins = await api("/api/admin/usuarios?role=admin");
       const alvo = document.getElementById("listaAdmins");
@@ -325,8 +359,20 @@
           <header><h4>${a.username}</h4><span class="status status-confirmado">admin</span></header>
           <p><strong>E-mail:</strong> ${a.email || "-"}</p>
           <p><strong>Loja:</strong> ${a.store_id ?? "super-admin"}</p>
+          <div class="acoes">
+            <button class="btn btn-outline btn-small" onclick="removerAdmin(${a.id})">Remover admin</button>
+          </div>
         </article>`).join("") || '<div class="empty-state">Nenhum admin.</div>';
     }
+
+    async function removerAdmin(id) {
+      if (!confirm("Remover este admin?")) return;
+      try {
+        await api(`/api/admin/usuarios/${id}`, { method: "DELETE" });
+        carregarAdmins();
+      } catch (err) { alert(err.message); }
+    }
+
     document.getElementById("formAdmin").addEventListener("submit", async e => {
       e.preventDefault();
       try {
@@ -344,7 +390,7 @@
       } catch (err) { alert(err.message); }
     });
 
-    // ---- Minha senha ----
+    // ==================== MINHA SENHA ====================
     document.getElementById("formSenha").addEventListener("submit", async e => {
       e.preventDefault();
       const atual = document.getElementById("senhaAtual").value;
@@ -361,7 +407,7 @@
       } catch (err) { alert(err.message); }
     });
 
-    // ---- Boot ----
+    // ==================== BOOT ====================
     (async () => {
       const u = await exigirAdmin();
       if (!u) return;
