@@ -67,7 +67,18 @@ def editar_loja(store_id):
 def deletar_loja(store_id):
     if current_user.store_id:
         return jsonify(error="Admin de loja não pode deletar loja"), 403
+
     s = Store.query.get_or_404(store_id)
+
+    # Só permite excluir se não houver histórico vinculado
+    tem_pedidos = Order.query.filter_by(store_id=store_id).count() > 0
+    tem_agendamentos = Appointment.query.filter_by(store_id=store_id).count() > 0
+    if tem_pedidos or tem_agendamentos:
+        return jsonify(error=(
+            "Essa loja tem pedidos ou agendamentos registrados. "
+            "Desative-a em vez de removê-la, para não perder o histórico."
+        )), 409
+
     db.session.delete(s)
     db.session.commit()
     return jsonify(ok=True)
