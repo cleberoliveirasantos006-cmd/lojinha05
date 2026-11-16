@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel | Amora Beauty</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand" href="/index.html"><span class="brand-mark">✿</span> amora<span>beauty</span></a>
+    <div class="nav-actions">
+      <span id="usuarioNome" class="user-name"></span>
+      <a class="nav-link" href="/index.html">Ver site</a>
+      <button class="btn btn-outline btn-small" onclick="sair()">Sair</button>
+    </div>
+  </nav>
+
+  <main class="section">
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow">PAINEL DO LOJISTA</span>
+        <h2 id="tituloPainel">Painel</h2>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="agendamentos">Agendamentos</button>
+      <button class="tab" data-tab="pedidos">Pedidos</button>
+      <button class="tab" data-tab="lojas">Lojas</button>
+      <button class="tab" data-tab="servicos">Serviços</button>
+      <button class="tab" data-tab="produtos">Produtos</button>
+      <button class="tab" data-tab="admins">Admins</button>
+      <button class="tab" data-tab="senha">Minha senha</button>
+    </div>
+
+    <section id="tab-agendamentos" class="tab-panel"><div id="listaAgendamentos" class="stack"></div></section>
+    <section id="tab-pedidos" class="tab-panel" hidden><div id="listaPedidos" class="stack"></div></section>
+    <section id="tab-lojas" class="tab-panel" hidden>
+      <form id="formLoja" class="form-card">
+        <h3>Nova loja</h3>
+        <input id="lojaSlug" placeholder="slug (ex: ana)" required>
+        <input id="lojaNome" placeholder="Nome" required>
+        <input id="lojaArea" placeholder="Área (ex: Especialista em cílios)">
+        <input id="lojaCidade" placeholder="Cidade/UF">
+        <input id="lojaEmail" type="email" placeholder="E-mail p/ notificações" required>
+        <input id="lojaInstagram" placeholder="Instagram">
+        <button class="btn btn-primary" type="submit">Adicionar loja</button>
+      </form>
+      <div id="listaLojas" class="stack"></div>
+    </section>
+    <section id="tab-servicos" class="tab-panel" hidden>
+      <form id="formServico" class="form-card">
+        <h3>Novo serviço</h3>
+        <select id="svLoja"></select>
+        <input id="svNome" placeholder="Nome do serviço" required>
+        <input id="svPreco" type="number" step="0.01" placeholder="Preço (R$)" required>
+        <input id="svOpcoes" placeholder="Opções separadas por vírgula">
+        <button class="btn btn-primary" type="submit">Adicionar</button>
+      </form>
+      <div id="listaServicos" class="stack"></div>
+    </section>
+    <section id="tab-produtos" class="tab-panel" hidden>
+      <form id="formProduto" class="form-card">
+        <h3>Novo produto</h3>
+        <select id="pLoja"></select>
+        <input id="pNome" placeholder="Nome do produto" required>
+        <input id="pDesc" placeholder="Descrição">
+        <input id="pPreco" type="number" step="0.01" placeholder="Preço (R$)" required>
+        <input id="pEmoji" placeholder="Emoji (ex: 🧴)" maxlength="4">
+        <button class="btn btn-primary" type="submit">Adicionar</button>
+      </form>
+      <div id="listaProdutos" class="stack"></div>
+    </section>
+    <section id="tab-admins" class="tab-panel" hidden>
+      <form id="formAdmin" class="form-card">
+        <h3>Criar novo admin</h3>
+        <input id="aUsername" placeholder="Usuário" required>
+        <input id="aSenha" type="password" placeholder="Senha inicial (mín. 6)" required>
+        <input id="aEmail" type="email" placeholder="E-mail (opcional)">
+        <input id="aStoreSlug" placeholder="Slug da loja (deixe vazio p/ super-admin)">
+        <button class="btn btn-primary" type="submit">Criar admin</button>
+      </form>
+      <div id="listaAdmins" class="stack"></div>
+    </section>
+    <section id="tab-senha" class="tab-panel" hidden>
+      <form id="formSenha" class="form-card">
+        <h3>Trocar minha senha</h3>
+        <input id="senhaAtual" type="password" placeholder="Senha atual" required>
+        <input id="senhaNova" type="password" placeholder="Nova senha (mín. 6)" required>
+        <input id="senhaNova2" type="password" placeholder="Confirme a nova senha" required>
+        <button class="btn btn-primary" type="submit">Salvar nova senha</button>
+      </form>
+    </section>
+  </main>
+
+  <footer><a class="brand" href="/index.html">✿ amora<span>beauty</span></a></footer>
+
+  <script>
+    const moeda = v => Number(v).toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
+    const slugify = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
+
+    async function api(url, opts = {}) {
+      const r = await fetch(url, { credentials: "include", ...opts });
+      const data = r.status === 204 ? null : await r.json().catch(() => null);
+      if (!r.ok) throw new Error((data && data.error) || r.statusText);
+      return data;
+    }
+
+    async function exigirAdmin() {
+      const u = await api("/api/auth/me");
+      if (!u.authenticated || u.role !== "admin") { location.href = "/login.html"; return null; }
+      document.getElementById("usuarioNome").textContent = "Olá, " + u.username;
+      document.getElementById("tituloPainel").textContent = "Painel — " + u.username;
+      return u;
+    }
+
+    function sair() {
+      fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+        .finally(() => { localStorage.removeItem("logado"); location.href = "/index.html"; });
+    }
+
+    // ---- Abas ----
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-panel").forEach(p => p.hidden = true);
+        btn.classList.add("active");
+        document.getElementById("tab-" + btn.dataset.tab).hidden = false;
+        const t = btn.dataset.tab;
+        if (t === "agendamentos") carregarAgendamentos();
+        if (t === "pedidos") carregarPedidos();
+        if (t === "lojas") carregarLojas();
+        if (t === "servicos") { carregarSelectLojas("svLoja").then(carregarServicos); }
+        if (t === "produtos") { carregarSelectLojas("pLoja").then(carregarProdutos); }
+        if (t === "admins") carregarAdmins();
+      });
+    });
+
+    // ---- Agendamentos ----
+    async function carregarAgendamentos() {
+      const ags = await api("/api/admin/agendamentos");
+      const alvo = document.getElementById("listaAgendamentos");
+      if (!ags.length) { alvo.innerHTML = '<div class="empty-state">Nenhum agendamento ainda.</div>'; return; }
+      alvo.innerHTML = ags.map(a => `
+        <article class="pedido-card">
+          <header>
+            <h3>${a.cliente} — ${a.data} às ${a.hora}</h3>
+            <span class="status status-${slugify(a.status)}">${a.status}</span>
+          </header>
+          <p><strong>Loja:</strong> ${a.store}</p>
+          <p><strong>Serviço:</strong> ${a.servico}</p>
+          <p><strong>Técnica:</strong> ${a.tecnica || "-"}</p>
+          <p><strong>Observação:</strong> ${a.observacao || "-"}</p>
+          <p><strong>Valor:</strong> ${moeda(a.preco)}</p>
+          <div class="acoes">
+            ${a.status === "Aguardando confirmação" ? `
+              <button class="btn btn-primary btn-small" onclick="mudarAg(${a.id},'Confirmado')">Confirmar</button>
+              <button class="btn btn-outline btn-small" onclick="mudarAg(${a.id},'Cancelado')">Cancelar</button>` : ""}
+            ${a.status === "Confirmado" ? `
+              <button class="btn btn-primary btn-small" onclick="mudarAg(${a.id},'Concluído')">Marcar como concluído</button>
+              <button class="btn btn-outline btn-small" onclick="mudarAg(${a.id},'Cancelado')">Cancelar</button>` : ""}
+          </div>
+        </article>`).join("");
+    }
+    async function mudarAg(id, status) {
+      await api(`/api/admin/agendamentos/${id}`, {
+        method: "PATCH", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({status}),
+      });
+      carregarAgendamentos();
+    }
+
+    // ---- Pedidos ----
+    async function carregarPedidos() {
+      const ps = await api("/api/admin/pedidos");
+      const alvo = document.getElementById("listaPedidos");
+      if (!ps.length) { alvo.innerHTML = '<div class="empty-state">Nenhum pedido ainda.</div>'; return; }
+      alvo.innerHTML = ps.map(p => `
+        <article class="pedido-card">
+          <header>
+            <h3>Pedido #${p.id} — ${p.cliente}</h3>
+            <span class="status status-${slugify(p.status)}">${p.status}</span>
+          </header>
+          <p><strong>Loja:</strong> ${p.store}</p>
+          <ul>${p.itens.map(i => `<li>${i.nome} × ${i.qtd} — ${moeda(i.preco)}</li>`).join("")}</ul>
+          <p><strong>Total:</strong> ${moeda(p.total)}</p>
+          <p class="muted">${new Date(p.criado_em).toLocaleString("pt-BR")}</p>
+          <div class="acoes">
+            ${p.status === "Aguardando confirmação" ? `
+              <button class="btn btn-primary btn-small" onclick="mudarPed(${p.id},'Confirmado')">Confirmar</button>
+              <button class="btn btn-outline btn-small" onclick="mudarPed(${p.id},'Cancelado')">Cancelar</button>` : ""}
+            ${p.status === "Confirmado" ? `
+              <button class="btn btn-primary btn-small" onclick="mudarPed(${p.id},'Entregue')">Marcar como entregue</button>` : ""}
+          </div>
+        </article>`).join("");
+    }
+    async function mudarPed(id, status) {
+      await api(`/api/admin/pedidos/${id}`, {
+        method: "PATCH", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({status}),
+      });
+      carregarPedidos();
+    }
+
+    // ---- Lojas ----
+    async function carregarLojas() {
+      const lojas = await api("/api/admin/lojas");
+      const box = document.getElementById("listaLojas");
+      box.innerHTML = lojas.map(l => `
+        <article class="pedido-card">
+          <header>
+            <h3>${l.nome}</h3>
+            <span class="status ${l.ativo ? "status-confirmado" : "status-cancelado"}">${l.ativo ? "Ativa" : "Inativa"}</span>
+          </header>
+          <p><strong>Slug:</strong> ${l.slug}</p>
+          <p><strong>E-mail:</strong> ${l.email_notificacao}</p>
+          <p><strong>Cidade:</strong> ${l.cidade || "-"}</p>
+        </article>`).join("") || '<div class="empty-state">Nenhuma loja.</div>';
+    }
+    document.getElementById("formLoja").addEventListener("submit", async e => {
+      e.preventDefault();
+      try {
+        await api("/api/admin/lojas", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            slug: document.getElementById("lojaSlug").value.trim(),
+            nome: document.getElementById("lojaNome").value.trim(),
+            area: document.getElementById("lojaArea").value.trim(),
+            cidade: document.getElementById("lojaCidade").value.trim(),
+            email_notificacao: document.getElementById("lojaEmail").value.trim(),
+            instagram: document.getElementById("lojaInstagram").value.trim(),
+          }),
+        });
+        e.target.reset(); carregarLojas();
+      } catch (err) { alert(err.message); }
+    });
+
+    // ---- Select de lojas ----
+    async function carregarSelectLojas(id) {
+      const lojas = await api("/api/admin/lojas");
+      const sel = document.getElementById(id);
+      sel.innerHTML = lojas.map(l => `<option value="${l.id}">${l.nome}</option>`).join("");
+    }
+
+    // ---- Serviços ----
+    async function carregarServicos() {
+      const lojas = await api("/api/admin/lojas");
+      const partes = [];
+      for (const l of lojas) {
+        const det = await api(`/api/profissionais/${l.slug}`);
+        partes.push(`<h3>${l.nome}</h3>` + (det.servicos || []).map(s => `
+          <article class="pedido-card">
+            <header><h4>${s.nome}</h4><strong>${moeda(s.preco)}</strong></header>
+            <p>${(s.opcoes || []).join(", ") || "Sem opções"}</p>
+            <button class="btn btn-outline btn-small" onclick="removerServico(${s.id})">Remover</button>
+          </article>`).join(""));
+      }
+      document.getElementById("listaServicos").innerHTML = partes.join("");
+    }
+    document.getElementById("formServico").addEventListener("submit", async e => {
+      e.preventDefault();
+      const storeId = document.getElementById("svLoja").value;
+      try {
+        await api(`/api/admin/lojas/${storeId}/servicos`, {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            nome: document.getElementById("svNome").value,
+            preco: parseFloat(document.getElementById("svPreco").value),
+            opcoes: document.getElementById("svOpcoes").value.split(",").map(s => s.trim()).filter(Boolean),
+          }),
+        });
+        e.target.reset(); carregarServicos();
+      } catch (err) { alert(err.message); }
+    });
+    async function removerServico(id) {
+      if (!confirm("Remover este serviço?")) return;
+      await api(`/api/admin/servicos/${id}`, { method: "DELETE" });
+      carregarServicos();
+    }
+
+    // ---- Produtos ----
+    async function carregarProdutos() {
+      const lojas = await api("/api/admin/lojas");
+      const partes = [];
+      for (const l of lojas) {
+        const det = await api(`/api/profissionais/${l.slug}`);
+        partes.push(`<h3>${l.nome}</h3>` + (det.produtos || []).map(p => `
+          <article class="pedido-card">
+            <header><h4>${p.emoji || ""} ${p.nome}</h4><strong>${moeda(p.preco)}</strong></header>
+            <p>${p.descricao || "-"}</p>
+            <button class="btn btn-outline btn-small" onclick="removerProduto(${p.id})">Remover</button>
+          </article>`).join(""));
+      }
+      document.getElementById("listaProdutos").innerHTML = partes.join("");
+    }
+    document.getElementById("formProduto").addEventListener("submit", async e => {
+      e.preventDefault();
+      const storeId = document.getElementById("pLoja").value;
+      try {
+        await api(`/api/admin/lojas/${storeId}/produtos`, {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            nome: document.getElementById("pNome").value,
+            descricao: document.getElementById("pDesc").value,
+            preco: parseFloat(document.getElementById("pPreco").value),
+            emoji: document.getElementById("pEmoji").value,
+          }),
+        });
+        e.target.reset(); carregarProdutos();
+      } catch (err) { alert(err.message); }
+    });
+    async function removerProduto(id) {
+      if (!confirm("Remover este produto?")) return;
+      await api(`/api/admin/produtos/${id}`, { method: "DELETE" });
+      carregarProdutos();
+    }
+
+    // ---- Admins ----
+    async function carregarAdmins() {
+      const admins = await api("/api/admin/usuarios?role=admin");
+      const alvo = document.getElementById("listaAdmins");
+      alvo.innerHTML = admins.map(a => `
+        <article class="pedido-card">
+          <header><h4>${a.username}</h4><span class="status status-confirmado">admin</span></header>
+          <p><strong>E-mail:</strong> ${a.email || "-"}</p>
+          <p><strong>Loja:</strong> ${a.store_id ?? "super-admin"}</p>
+        </article>`).join("") || '<div class="empty-state">Nenhum admin.</div>';
+    }
+    document.getElementById("formAdmin").addEventListener("submit", async e => {
+      e.preventDefault();
+      try {
+        await api("/api/admin/usuarios", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            username: document.getElementById("aUsername").value.trim(),
+            password: document.getElementById("aSenha").value,
+            email: document.getElementById("aEmail").value.trim() || null,
+            store_slug: document.getElementById("aStoreSlug").value.trim() || null,
+          }),
+        });
+        alert("Admin criado!");
+        e.target.reset(); carregarAdmins();
+      } catch (err) { alert(err.message); }
+    });
+
+    // ---- Minha senha ----
+    document.getElementById("formSenha").addEventListener("submit", async e => {
+      e.preventDefault();
+      const atual = document.getElementById("senhaAtual").value;
+      const nova = document.getElementById("senhaNova").value;
+      const nova2 = document.getElementById("senhaNova2").value;
+      if (nova !== nova2) return alert("As senhas novas não coincidem.");
+      try {
+        await api("/api/admin/usuarios/me/senha", {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ senha_atual: atual, nova_senha: nova }),
+        });
+        alert("Senha alterada com sucesso!");
+        e.target.reset();
+      } catch (err) { alert(err.message); }
+    });
+
+    // ---- Boot ----
+    (async () => {
+      const u = await exigirAdmin();
+      if (!u) return;
+      carregarAgendamentos();
+    })();
+  </script>
+</body>
+</html>

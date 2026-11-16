@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Criar conta | Amora Beauty</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="login-page">
+  <main class="login-box">
+    <a class="brand" href="/index.html">✿ amora<span>beauty</span></a>
+    <h2>Crie sua conta</h2>
+    <p>Cadastro para clientes. Contas de administrador são criadas por outro admin no painel.</p>
+    <form id="formCadastro">
+      <input id="novoUser" placeholder="Escolha um usuário" required>
+      <input id="novaSenha" type="password" minlength="4" placeholder="Crie uma senha (mín. 4 caracteres)" required>
+      <input id="novoEmail" type="email" placeholder="Seu e-mail (opcional)">
+      <button class="btn btn-primary" type="submit">Cadastrar</button>
+    </form>
+    <p>Já tem conta? <a href="/login.html">Entrar</a></p>
+    <p><a href="/index.html">Voltar ao início</a></p>
+  </main>
+  <script>
+    document.getElementById("formCadastro").addEventListener("submit", async e => {
+      e.preventDefault();
+      const username = document.getElementById("novoUser").value.trim();
+      const password = document.getElementById("novaSenha").value;
+      const email = document.getElementById("novoEmail").value.trim() || null;
+      const r = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password, email }),
+      });
+      const data = await r.json();
+      if (!r.ok) return alert(data.error);
+      alert("Cadastro realizado! Agora entre na sua conta.");
+      location.href = "/login.html";
+    });
+  </script>
+</body>
+</html>
