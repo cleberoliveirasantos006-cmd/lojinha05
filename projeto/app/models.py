@@ -45,6 +45,7 @@ class Store(db.Model):
     whatsapp = db.Column(db.String(30))
     email_notificacao = db.Column(db.String(120), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
+    imagem_url = db.Column(db.String(500), nullable=True)
 
     servicos = db.relationship("Service", backref="store", cascade="all, delete-orphan")
     produtos = db.relationship("Product", backref="store", cascade="all, delete-orphan")
@@ -67,6 +68,7 @@ class Product(db.Model):
     descricao = db.Column(db.Text)
     preco = db.Column(db.Numeric(10, 2), nullable=False)
     emoji = db.Column(db.String(10))
+    imagem_url = db.Column(db.String(500), nullable=True)
 
 
 class Appointment(db.Model):
