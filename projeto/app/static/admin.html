@@ -239,14 +239,14 @@
           body: JSON.stringify({ ativo: !ativoAtual }),
         });
         carregarLojas();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível alterar a loja."); }
     }
     async function removerLoja(id) {
-      if (!confirm("Remover esta loja? Isso apaga também serviços, produtos, agendamentos e pedidos dela.")) return;
+      if (!confirm("Remover esta loja? Se houver pedidos/agendamentos, não será possível.")) return;
       try {
         await api(`/api/admin/lojas/${id}`, { method: "DELETE" });
         carregarLojas();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível remover a loja."); }
     }
     document.getElementById("formLoja").addEventListener("submit", async e => {
       e.preventDefault();
@@ -264,7 +264,7 @@
           }),
         });
         e.target.reset(); carregarLojas();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível criar a loja."); }
     });
 
     // ==================== SELECT DE LOJAS ====================
@@ -302,14 +302,14 @@
           }),
         });
         e.target.reset(); carregarServicos();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível criar o serviço."); }
     });
     async function removerServico(id) {
       if (!confirm("Remover este serviço?")) return;
       try {
         await api(`/api/admin/servicos/${id}`, { method: "DELETE" });
         carregarServicos();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível remover o serviço."); }
     }
 
     // ==================== PRODUTOS ====================
@@ -345,14 +345,14 @@
           }),
         });
         e.target.reset(); carregarProdutos();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível criar o produto."); }
     });
     async function removerProduto(id) {
       if (!confirm("Remover este produto?")) return;
       try {
         await api(`/api/admin/produtos/${id}`, { method: "DELETE" });
         carregarProdutos();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível remover o produto."); }
     }
 
     // ==================== ADMINS ====================
@@ -374,7 +374,7 @@
       try {
         await api(`/api/admin/usuarios/${id}`, { method: "DELETE" });
         carregarAdmins();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível remover o admin."); }
     }
     document.getElementById("formAdmin").addEventListener("submit", async e => {
       e.preventDefault();
@@ -390,7 +390,7 @@
         });
         alert("Admin criado!");
         e.target.reset(); carregarAdmins();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível criar o admin."); }
     });
 
     // ==================== MINHA SENHA ====================
@@ -407,7 +407,7 @@
         });
         alert("Senha alterada com sucesso!");
         e.target.reset();
-      } catch (err) { alert(err.message); }
+      } catch (err) { alert(err.message || "Não foi possível trocar a senha."); }
     });
 
     // ==================== BOOT ====================
