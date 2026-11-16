@@ -46,6 +46,7 @@
         <input id="lojaCidade" placeholder="Cidade/UF">
         <input id="lojaEmail" type="email" placeholder="E-mail p/ notificações" required>
         <input id="lojaInstagram" placeholder="Instagram">
+        <input id="lojaImagem" type="url" placeholder="URL da imagem de capa (opcional)">
         <button class="btn btn-primary" type="submit">Adicionar loja</button>
       </form>
       <div id="listaLojas" class="stack"></div>
@@ -71,6 +72,7 @@
         <input id="pDesc" placeholder="Descrição">
         <input id="pPreco" type="number" step="0.01" placeholder="Preço (R$)" required>
         <input id="pEmoji" placeholder="Emoji (ex: 🧴)" maxlength="4">
+        <input id="pImagem" type="url" placeholder="URL da imagem do produto (opcional)">
         <button class="btn btn-primary" type="submit">Adicionar</button>
       </form>
       <div id="listaProdutos" class="stack"></div>
@@ -214,6 +216,7 @@
       const box = document.getElementById("listaLojas");
       box.innerHTML = lojas.map(l => `
         <article class="pedido-card">
+          ${l.imagem_url ? `<img src="${l.imagem_url}" alt="" style="width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:.5rem;">` : ""}
           <header>
             <h3>${l.nome}</h3>
             <span class="status ${l.ativo ? "status-confirmado" : "status-cancelado"}">${l.ativo ? "Ativa" : "Inativa"}</span>
@@ -229,7 +232,6 @@
           </div>
         </article>`).join("") || '<div class="empty-state">Nenhuma loja.</div>';
     }
-
     async function alternarLoja(id, ativoAtual) {
       try {
         await api(`/api/admin/lojas/${id}`, {
@@ -239,7 +241,6 @@
         carregarLojas();
       } catch (err) { alert(err.message); }
     }
-
     async function removerLoja(id) {
       if (!confirm("Remover esta loja? Isso apaga também serviços, produtos, agendamentos e pedidos dela.")) return;
       try {
@@ -247,172 +248,7 @@
         carregarLojas();
       } catch (err) { alert(err.message); }
     }
-
     document.getElementById("formLoja").addEventListener("submit", async e => {
       e.preventDefault();
       try {
-        await api("/api/admin/lojas", {
-          method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            slug: document.getElementById("lojaSlug").value.trim(),
-            nome: document.getElementById("lojaNome").value.trim(),
-            area: document.getElementById("lojaArea").value.trim(),
-            cidade: document.getElementById("lojaCidade").value.trim(),
-            email_notificacao: document.getElementById("lojaEmail").value.trim(),
-            instagram: document.getElementById("lojaInstagram").value.trim(),
-          }),
-        });
-        e.target.reset(); carregarLojas();
-      } catch (err) { alert(err.message); }
-    });
-
-    // ==================== SELECT DE LOJAS ====================
-    async function carregarSelectLojas(id) {
-      const lojas = await api("/api/admin/lojas");
-      const sel = document.getElementById(id);
-      sel.innerHTML = lojas.map(l => `<option value="${l.id}">${l.nome}</option>`).join("");
-    }
-
-    // ==================== SERVIÇOS ====================
-    async function carregarServicos() {
-      const lojas = await api("/api/admin/lojas");
-      const partes = [];
-      for (const l of lojas) {
-        const det = await api(`/api/profissionais/${l.slug}`);
-        partes.push(`<h3>${l.nome}</h3>` + (det.servicos || []).map(s => `
-          <article class="pedido-card">
-            <header><h4>${s.nome}</h4><strong>${moeda(s.preco)}</strong></header>
-            <p>${(s.opcoes || []).join(", ") || "Sem opções"}</p>
-            <button class="btn btn-outline btn-small" onclick="removerServico(${s.id})">Remover</button>
-          </article>`).join(""));
-      }
-      document.getElementById("listaServicos").innerHTML = partes.join("");
-    }
-    document.getElementById("formServico").addEventListener("submit", async e => {
-      e.preventDefault();
-      const storeId = document.getElementById("svLoja").value;
-      try {
-        await api(`/api/admin/lojas/${storeId}/servicos`, {
-          method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            nome: document.getElementById("svNome").value,
-            preco: parseFloat(document.getElementById("svPreco").value),
-            opcoes: document.getElementById("svOpcoes").value.split(",").map(s => s.trim()).filter(Boolean),
-          }),
-        });
-        e.target.reset(); carregarServicos();
-      } catch (err) { alert(err.message); }
-    });
-    async function removerServico(id) {
-      if (!confirm("Remover este serviço?")) return;
-      try {
-        await api(`/api/admin/servicos/${id}`, { method: "DELETE" });
-        carregarServicos();
-      } catch (err) { alert(err.message); }
-    }
-
-    // ==================== PRODUTOS ====================
-    async function carregarProdutos() {
-      const lojas = await api("/api/admin/lojas");
-      const partes = [];
-      for (const l of lojas) {
-        const det = await api(`/api/profissionais/${l.slug}`);
-        partes.push(`<h3>${l.nome}</h3>` + (det.produtos || []).map(p => `
-          <article class="pedido-card">
-            <header><h4>${p.emoji || ""} ${p.nome}</h4><strong>${moeda(p.preco)}</strong></header>
-            <p>${p.descricao || "-"}</p>
-            <button class="btn btn-outline btn-small" onclick="removerProduto(${p.id})">Remover</button>
-          </article>`).join(""));
-      }
-      document.getElementById("listaProdutos").innerHTML = partes.join("");
-    }
-    document.getElementById("formProduto").addEventListener("submit", async e => {
-      e.preventDefault();
-      const storeId = document.getElementById("pLoja").value;
-      try {
-        await api(`/api/admin/lojas/${storeId}/produtos`, {
-          method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            nome: document.getElementById("pNome").value,
-            descricao: document.getElementById("pDesc").value,
-            preco: parseFloat(document.getElementById("pPreco").value),
-            emoji: document.getElementById("pEmoji").value,
-          }),
-        });
-        e.target.reset(); carregarProdutos();
-      } catch (err) { alert(err.message); }
-    });
-    async function removerProduto(id) {
-      if (!confirm("Remover este produto?")) return;
-      try {
-        await api(`/api/admin/produtos/${id}`, { method: "DELETE" });
-        carregarProdutos();
-      } catch (err) { alert(err.message); }
-    }
-
-    // ==================== ADMINS ====================
-    async function carregarAdmins() {
-      const admins = await api("/api/admin/usuarios?role=admin");
-      const alvo = document.getElementById("listaAdmins");
-      alvo.innerHTML = admins.map(a => `
-        <article class="pedido-card">
-          <header><h4>${a.username}</h4><span class="status status-confirmado">admin</span></header>
-          <p><strong>E-mail:</strong> ${a.email || "-"}</p>
-          <p><strong>Loja:</strong> ${a.store_id ?? "super-admin"}</p>
-          <div class="acoes">
-            <button class="btn btn-outline btn-small" onclick="removerAdmin(${a.id})">Remover admin</button>
-          </div>
-        </article>`).join("") || '<div class="empty-state">Nenhum admin.</div>';
-    }
-
-    async function removerAdmin(id) {
-      if (!confirm("Remover este admin?")) return;
-      try {
-        await api(`/api/admin/usuarios/${id}`, { method: "DELETE" });
-        carregarAdmins();
-      } catch (err) { alert(err.message); }
-    }
-
-    document.getElementById("formAdmin").addEventListener("submit", async e => {
-      e.preventDefault();
-      try {
-        await api("/api/admin/usuarios", {
-          method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            username: document.getElementById("aUsername").value.trim(),
-            password: document.getElementById("aSenha").value,
-            email: document.getElementById("aEmail").value.trim() || null,
-            store_slug: document.getElementById("aStoreSlug").value.trim() || null,
-          }),
-        });
-        alert("Admin criado!");
-        e.target.reset(); carregarAdmins();
-      } catch (err) { alert(err.message); }
-    });
-
-    // ==================== MINHA SENHA ====================
-    document.getElementById("formSenha").addEventListener("submit", async e => {
-      e.preventDefault();
-      const atual = document.getElementById("senhaAtual").value;
-      const nova = document.getElementById("senhaNova").value;
-      const nova2 = document.getElementById("senhaNova2").value;
-      if (nova !== nova2) return alert("As senhas novas não coincidem.");
-      try {
-        await api("/api/admin/usuarios/me/senha", {
-          method: "PATCH", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ senha_atual: atual, nova_senha: nova }),
-        });
-        alert("Senha alterada com sucesso!");
-        e.target.reset();
-      } catch (err) { alert(err.message); }
-    });
-
-    // ==================== BOOT ====================
-    (async () => {
-      const u = await exigirAdmin();
-      if (!u) return;
-      carregarAgendamentos();
-    })();
-  </script>
-</body>
-</html>
+        await
