@@ -12,6 +12,7 @@
     <div class="nav-actions">
       <span id="usuarioNome" class="user-name"></span>
       <a class="nav-link" href="/index.html">Início</a>
+      <a class="nav-link" id="suporteLink" href="#" target="_blank">Suporte</a>
       <button class="btn btn-outline btn-small" onclick="sair()">Sair</button>
     </div>
   </nav>
@@ -24,21 +25,40 @@
     <div class="tabs">
       <button class="tab active" data-tab="agendamentos">Meus agendamentos</button>
       <button class="tab" data-tab="pedidos">Meus pedidos</button>
+      <button class="tab" data-tab="perguntas">Minhas perguntas</button>
     </div>
 
     <section id="tab-agendamentos" class="tab-panel"><div id="listaAgendamentos" class="stack"></div></section>
     <section id="tab-pedidos" class="tab-panel" hidden><div id="listaPedidos" class="stack"></div></section>
+    <section id="tab-perguntas" class="tab-panel" hidden>
+      <form id="formPergunta" class="form-card">
+        <h3>Enviar pergunta à loja</h3>
+        <select id="pqLoja" required></select>
+        <textarea id="pqTexto" placeholder="Sua pergunta..." required></textarea>
+        <button class="btn btn-primary" type="submit">Enviar pergunta</button>
+      </form>
+      <div id="listaPerguntas" class="stack"></div>
+    </section>
   </main>
 
-  <footer><a class="brand" href="/index.html">✿ amora<span>beauty</span></a></footer>
+  <footer>
+    <a class="brand" href="/index.html">✿ amora<span>beauty</span></a>
+    <p><a id="suporteFooter" href="#" target="_blank">Reportar bug / Falar com suporte</a></p>
+  </footer>
 
   <script>
     const moeda = v => Number(v).toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
     const slugify = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
 
+    async function api(url, opts = {}) {
+      const r = await fetch(url, { credentials: "include", ...opts });
+      const data = r.status === 204 ? null : await r.json().catch(() => null);
+      if (!r.ok) throw new Error((data && data.error) || r.statusText);
+      return data;
+    }
+
     async function exigirLogin() {
-      const r = await fetch("/api/auth/me", { credentials: "include" });
-      const u = await r.json();
+      const u = await api("/api/auth/me");
       if (!u.authenticated) { location.href = "/login.html"; return null; }
       if (u.role === "admin") { location.href = "/admin.html"; return null; }
       document.getElementById("nomeCliente").textContent = u.username;
@@ -51,17 +71,26 @@
         .finally(() => { localStorage.removeItem("logado"); location.href = "/index.html"; });
     }
 
+    api("/api/config/suporte").then(c => {
+      if (c && c.url) {
+        document.getElementById("suporteLink").href = c.url;
+        document.getElementById("suporteFooter").href = c.url;
+      }
+    }).catch(() => {});
+
     document.querySelectorAll(".tab").forEach(btn => {
       btn.addEventListener("click", () => {
         document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
         document.querySelectorAll(".tab-panel").forEach(p => p.hidden = true);
         btn.classList.add("active");
-        document.getElementById("tab-" + btn.dataset.tab).hidden = false;
+        const t = btn.dataset.tab;
+        document.getElementById("tab-" + t).hidden = false;
+        if (t === "perguntas") carregarPerguntas();
       });
     });
 
     async function carregarAgendamentos() {
-      const ags = await fetch("/api/me/agendamentos", { credentials: "include" }).then(r => r.json());
+      const ags = await api("/api/me/agendamentos");
       const alvo = document.getElementById("listaAgendamentos");
       if (!ags.length) { alvo.innerHTML = '<div class="empty-state">Você ainda não tem agendamentos.</div>'; return; }
       alvo.innerHTML = ags.map(a => `
@@ -73,11 +102,9 @@
           <p><strong>Quando:</strong> ${a.data} às ${a.hora}</p>
           <p><strong>Técnica:</strong> ${a.tecnica || "-"}</p>
           <p><strong>Valor:</strong> ${moeda(a.preco)}</p>
-          ${a.status === "Aguardando confirmação"
-            ? `<button class="btn btn-outline btn-small" onclick="cancelarAgendamento(${a.id})">Cancelar solicitação</button>` : ""}
+          ${a.status === "Aguardando confirmação" ? `<button class="btn btn-outline btn-small" onclick="cancelarAgendamento(${a.id})">Cancelar solicitação</button>` : ""}
         </article>`).join("");
     }
-
     async function cancelarAgendamento(id) {
       if (!confirm("Cancelar este agendamento?")) return;
       await fetch(`/api/me/agendamentos/${id}/cancelar`, { method: "PATCH", credentials: "include" });
@@ -85,7 +112,7 @@
     }
 
     async function carregarPedidos() {
-      const ps = await fetch("/api/me/pedidos", { credentials: "include" }).then(r => r.json());
+      const ps = await api("/api/me/pedidos");
       const alvo = document.getElementById("listaPedidos");
       if (!ps.length) { alvo.innerHTML = '<div class="empty-state">Você ainda não tem pedidos.</div>'; return; }
       alvo.innerHTML = ps.map(p => `
@@ -97,16 +124,54 @@
           <ul>${p.itens.map(i => `<li>${i.nome} × ${i.qtd} — ${moeda(i.preco)}</li>`).join("")}</ul>
           <p><strong>Total:</strong> ${moeda(p.total)}</p>
           <p class="muted">Feito em ${new Date(p.criado_em).toLocaleString("pt-BR")}</p>
-          ${p.status === "Aguardando confirmação"
-            ? `<button class="btn btn-outline btn-small" onclick="cancelarPedido(${p.id})">Cancelar pedido</button>` : ""}
+          ${p.motivo_negacao ? `<p class="muted"><strong>Motivo da negação:</strong> ${p.motivo_negacao}</p>` : ""}
+          ${p.mensagem_lojista ? `<p class="muted"><strong>Mensagem da loja:</strong> ${p.mensagem_lojista}</p>` : ""}
+          ${p.status === "Aguardando confirmação" ? `<button class="btn btn-outline btn-small" onclick="cancelarPedido(${p.id})">Cancelar pedido</button>` : ""}
         </article>`).join("");
     }
-
     async function cancelarPedido(id) {
       if (!confirm("Cancelar este pedido?")) return;
       await fetch(`/api/me/pedidos/${id}/cancelar`, { method: "PATCH", credentials: "include" });
       carregarPedidos();
     }
+
+    async function carregarSelectLojas() {
+      const lojas = await api("/api/profissionais");
+      const sel = document.getElementById("pqLoja");
+      sel.innerHTML = lojas.map(l => `<option value="${l.slug}">${l.nome}</option>`).join("");
+    }
+
+    async function carregarPerguntas() {
+      await carregarSelectLojas();
+      const qs = await api("/api/me/perguntas");
+      const alvo = document.getElementById("listaPerguntas");
+      if (!qs.length) { alvo.innerHTML = '<div class="empty-state">Você ainda não fez perguntas.</div>'; return; }
+      alvo.innerHTML = qs.map(q => `
+        <article class="pedido-card">
+          <header>
+            <h3>${q.store}</h3>
+            <span class="status ${q.resposta ? "status-confirmado" : "status-aguardando-confirmacao"}">
+              ${q.resposta ? "Respondida" : "Aguardando resposta"}
+            </span>
+          </header>
+          <p><strong>Sua pergunta:</strong> ${q.pergunta}</p>
+          ${q.resposta ? `<p><strong>Resposta:</strong> ${q.resposta}</p>` : ""}
+        </article>`).join("");
+    }
+
+    document.getElementById("formPergunta").addEventListener("submit", async e => {
+      e.preventDefault();
+      try {
+        await api("/api/me/perguntas", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            store_slug: document.getElementById("pqLoja").value,
+            pergunta: document.getElementById("pqTexto").value,
+          }),
+        });
+        e.target.reset(); carregarPerguntas();
+      } catch (err) { alert(err.message || "Erro ao enviar pergunta."); }
+    });
 
     (async () => {
       const u = await exigirLogin();
