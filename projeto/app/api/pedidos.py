@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import Store, Product, Order, OrderItem
 
 ord_bp = Blueprint("ord", __name__, url_prefix="/api/pedidos")
@@ -8,6 +8,7 @@ ord_bp = Blueprint("ord", __name__, url_prefix="/api/pedidos")
 
 @ord_bp.post("")
 @login_required
+@limiter.limit("20 per hour")
 def criar_pedido():
     data = request.get_json() or {}
     store = Store.query.filter_by(slug=data.get("store_slug"), ativo=True).first()
@@ -18,12 +19,8 @@ def criar_pedido():
     if not itens_req:
         return jsonify(error="Pedido vazio"), 400
 
-    order = Order(
-        store_id=store.id,
-        cliente_username=current_user.username,
-        cliente_email=current_user.email,
-        total=0,
-    )
+    order = Order(store_id=store.id, cliente_username=current_user.username,
+                  cliente_email=current_user.email, total=0)
     db.session.add(order)
     db.session.flush()
 
@@ -42,5 +39,4 @@ def criar_pedido():
 
     order.total = total
     db.session.commit()
-
     return jsonify(id=order.id, total=float(order.total)), 201
