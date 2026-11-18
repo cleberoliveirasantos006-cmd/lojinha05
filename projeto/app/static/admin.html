@@ -12,6 +12,7 @@
     <div class="nav-actions">
       <span id="usuarioNome" class="user-name"></span>
       <a class="nav-link" href="/index.html">Ver site</a>
+      <a class="nav-link" id="suporteLink" href="#" target="_blank">Suporte</a>
       <button class="btn btn-outline btn-small" onclick="sair()">Sair</button>
     </div>
   </nav>
@@ -27,6 +28,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="agendamentos">Agendamentos</button>
       <button class="tab" data-tab="pedidos">Pedidos</button>
+      <button class="tab" data-tab="perguntas">Perguntas</button>
       <button class="tab" data-tab="lojas">Lojas</button>
       <button class="tab" data-tab="servicos">Serviços</button>
       <button class="tab" data-tab="produtos">Produtos</button>
@@ -36,6 +38,7 @@
 
     <section id="tab-agendamentos" class="tab-panel"><div id="listaAgendamentos" class="stack"></div></section>
     <section id="tab-pedidos" class="tab-panel" hidden><div id="listaPedidos" class="stack"></div></section>
+    <section id="tab-perguntas" class="tab-panel" hidden><div id="listaPerguntas" class="stack"></div></section>
 
     <section id="tab-lojas" class="tab-panel" hidden>
       <form id="formLoja" class="form-card">
@@ -54,26 +57,33 @@
 
     <section id="tab-servicos" class="tab-panel" hidden>
       <form id="formServico" class="form-card">
-        <h3>Novo serviço</h3>
+        <h3 id="tituloFormServico">Novo serviço</h3>
         <select id="svLoja"></select>
         <input id="svNome" placeholder="Nome do serviço" required>
+        <input id="svDesc" placeholder="Descrição do serviço">
         <input id="svPreco" type="number" step="0.01" placeholder="Preço (R$)" required>
         <input id="svOpcoes" placeholder="Opções separadas por vírgula">
-        <button class="btn btn-primary" type="submit">Adicionar</button>
+        <div class="acoes">
+          <button class="btn btn-primary" type="submit" id="btnSalvarServico">Adicionar</button>
+          <button class="btn btn-outline" type="button" id="btnCancelarServico" hidden onclick="cancelarEdicaoServico()">Cancelar edição</button>
+        </div>
       </form>
       <div id="listaServicos" class="stack"></div>
     </section>
 
     <section id="tab-produtos" class="tab-panel" hidden>
       <form id="formProduto" class="form-card">
-        <h3>Novo produto</h3>
+        <h3 id="tituloFormProduto">Novo produto</h3>
         <select id="pLoja"></select>
         <input id="pNome" placeholder="Nome do produto" required>
         <input id="pDesc" placeholder="Descrição">
         <input id="pPreco" type="number" step="0.01" placeholder="Preço (R$)" required>
         <input id="pEmoji" placeholder="Emoji (ex: 🧴)" maxlength="4">
-        <input id="pImagem" type="url" placeholder="URL da imagem do produto (opcional)">
-        <button class="btn btn-primary" type="submit">Adicionar</button>
+        <input id="pImagem" type="url" placeholder="URL da imagem (opcional)">
+        <div class="acoes">
+          <button class="btn btn-primary" type="submit" id="btnSalvarProduto">Adicionar</button>
+          <button class="btn btn-outline" type="button" id="btnCancelarProduto" hidden onclick="cancelarEdicaoProduto()">Cancelar edição</button>
+        </div>
       </form>
       <div id="listaProdutos" class="stack"></div>
     </section>
@@ -84,7 +94,7 @@
         <input id="aUsername" placeholder="Usuário" required>
         <input id="aSenha" type="password" placeholder="Senha inicial (mín. 6)" required>
         <input id="aEmail" type="email" placeholder="E-mail (opcional)">
-        <input id="aStoreSlug" placeholder="Slug da loja (deixe vazio p/ super-admin)">
+        <select id="aStoreSlug" required></select>
         <button class="btn btn-primary" type="submit">Criar admin</button>
       </form>
       <div id="listaAdmins" class="stack"></div>
@@ -101,11 +111,18 @@
     </section>
   </main>
 
-  <footer><a class="brand" href="/index.html">✿ amora<span>beauty</span></a></footer>
+  <footer>
+    <a class="brand" href="/index.html">✿ amora<span>beauty</span></a>
+    <p><a id="suporteFooter" href="#" target="_blank">Reportar bug / Falar com suporte</a></p>
+  </footer>
 
   <script>
     const moeda = v => Number(v).toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
     const slugify = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
+
+    let EU = null;
+    let editandoServicoId = null;
+    let editandoProdutoId = null;
 
     async function api(url, opts = {}) {
       const r = await fetch(url, { credentials: "include", ...opts });
@@ -117,6 +134,7 @@
     async function exigirAdmin() {
       const u = await api("/api/auth/me");
       if (!u.authenticated || u.role !== "admin") { location.href = "/login.html"; return null; }
+      EU = u;
       document.getElementById("usuarioNome").textContent = "Olá, " + u.username;
       document.getElementById("tituloPainel").textContent = "Painel — " + u.username;
       return u;
@@ -126,6 +144,14 @@
       fetch("/api/auth/logout", { method: "POST", credentials: "include" })
         .finally(() => { localStorage.removeItem("logado"); location.href = "/index.html"; });
     }
+
+    // Link de suporte
+    api("/api/config/suporte").then(c => {
+      if (c && c.url) {
+        document.getElementById("suporteLink").href = c.url;
+        document.getElementById("suporteFooter").href = c.url;
+      }
+    }).catch(() => {});
 
     // ==================== ABAS ====================
     document.querySelectorAll(".tab").forEach(btn => {
@@ -137,10 +163,11 @@
         const t = btn.dataset.tab;
         if (t === "agendamentos") carregarAgendamentos();
         if (t === "pedidos") carregarPedidos();
+        if (t === "perguntas") carregarPerguntas();
         if (t === "lojas") carregarLojas();
         if (t === "servicos") { carregarSelectLojas("svLoja").then(carregarServicos); }
         if (t === "produtos") { carregarSelectLojas("pLoja").then(carregarProdutos); }
-        if (t === "admins") carregarAdmins();
+        if (t === "admins") { carregarSelectLojasAdmin(); carregarAdmins(); }
       });
     });
 
@@ -193,21 +220,82 @@
           <ul>${p.itens.map(i => `<li>${i.nome} × ${i.qtd} — ${moeda(i.preco)}</li>`).join("")}</ul>
           <p><strong>Total:</strong> ${moeda(p.total)}</p>
           <p class="muted">${new Date(p.criado_em).toLocaleString("pt-BR")}</p>
+          ${p.motivo_negacao ? `<p class="muted"><strong>Motivo da negação:</strong> ${p.motivo_negacao}</p>` : ""}
+          ${p.mensagem_lojista ? `<p class="muted"><strong>Mensagem ao cliente:</strong> ${p.mensagem_lojista}</p>` : ""}
           <div class="acoes">
             ${p.status === "Aguardando confirmação" ? `
               <button class="btn btn-primary btn-small" onclick="mudarPed(${p.id},'Confirmado')">Confirmar</button>
-              <button class="btn btn-outline btn-small" onclick="mudarPed(${p.id},'Cancelado')">Cancelar</button>` : ""}
+              <button class="btn btn-outline btn-small" onclick="negarPedido(${p.id})">Negar</button>` : ""}
             ${p.status === "Confirmado" ? `
-              <button class="btn btn-primary btn-small" onclick="mudarPed(${p.id},'Entregue')">Marcar como entregue</button>` : ""}
+              <button class="btn btn-primary btn-small" onclick="mudarPed(${p.id},'Entregue')">Marcar como entregue</button>
+              <button class="btn btn-outline btn-small" onclick="negarPedido(${p.id})">Cancelar com motivo</button>` : ""}
+            ${(p.status === "Confirmado" || p.status === "Entregue") ? `
+              <button class="btn btn-outline btn-small" onclick="enviarMensagem(${p.id})">Enviar mensagem</button>` : ""}
           </div>
         </article>`).join("");
     }
     async function mudarPed(id, status) {
-      await api(`/api/admin/pedidos/${id}`, {
-        method: "PATCH", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({status}),
-      });
-      carregarPedidos();
+      try {
+        await api(`/api/admin/pedidos/${id}`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({status}),
+        });
+        carregarPedidos();
+      } catch (err) { alert(err.message || "Erro ao alterar pedido."); }
+    }
+    async function negarPedido(id) {
+      const motivo = prompt("Digite o motivo da negação/cancelamento:");
+      if (!motivo) return;
+      try {
+        await api(`/api/admin/pedidos/${id}`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ status: "Negado", motivo }),
+        });
+        carregarPedidos();
+      } catch (err) { alert(err.message || "Erro ao negar pedido."); }
+    }
+    async function enviarMensagem(id) {
+      const msg = prompt("Mensagem ao cliente:");
+      if (!msg) return;
+      try {
+        await api(`/api/admin/pedidos/${id}/mensagem`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ mensagem: msg }),
+        });
+        alert("Mensagem enviada.");
+        carregarPedidos();
+      } catch (err) { alert(err.message || "Erro ao enviar mensagem."); }
+    }
+
+    // ==================== PERGUNTAS ====================
+    async function carregarPerguntas() {
+      const qs = await api("/api/admin/perguntas");
+      const alvo = document.getElementById("listaPerguntas");
+      if (!qs.length) { alvo.innerHTML = '<div class="empty-state">Nenhuma pergunta ainda.</div>'; return; }
+      alvo.innerHTML = qs.map(q => `
+        <article class="pedido-card">
+          <header>
+            <h3>${q.cliente} → ${q.store}</h3>
+            <span class="status ${q.resposta ? "status-confirmado" : "status-aguardando-confirmacao"}">
+              ${q.resposta ? "Respondida" : "Pendente"}
+            </span>
+          </header>
+          <p><strong>Pergunta:</strong> ${q.pergunta}</p>
+          ${q.resposta ? `<p><strong>Resposta:</strong> ${q.resposta}</p>` : ""}
+          ${!q.resposta ? `
+            <button class="btn btn-primary btn-small" onclick="responderPergunta(${q.id})">Responder</button>` : ""}
+        </article>`).join("");
+    }
+    async function responderPergunta(id) {
+      const txt = prompt("Digite a resposta:");
+      if (!txt) return;
+      try {
+        await api(`/api/admin/perguntas/${id}`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ resposta: txt }),
+        });
+        carregarPerguntas();
+      } catch (err) { alert(err.message || "Erro ao responder."); }
     }
 
     // ==================== LOJAS ====================
@@ -274,6 +362,17 @@
       sel.innerHTML = lojas.map(l => `<option value="${l.id}">${l.nome}</option>`).join("");
     }
 
+    async function carregarSelectLojasAdmin() {
+      const lojas = await api("/api/admin/lojas");
+      const sel = document.getElementById("aStoreSlug");
+      let opcoes = "";
+      if (EU && EU.store_id === null) {
+        opcoes += '<option value="__super__">Super-admin (vê tudo)</option>';
+      }
+      opcoes += lojas.map(l => `<option value="${l.slug}">${l.nome}</option>`).join("");
+      sel.innerHTML = opcoes;
+    }
+
     // ==================== SERVIÇOS ====================
     async function carregarServicos() {
       const lojas = await api("/api/admin/lojas");
@@ -283,8 +382,12 @@
         partes.push(`<h3>${l.nome}</h3>` + (det.servicos || []).map(s => `
           <article class="pedido-card">
             <header><h4>${s.nome}</h4><strong>${moeda(s.preco)}</strong></header>
-            <p>${(s.opcoes || []).join(", ") || "Sem opções"}</p>
-            <button class="btn btn-outline btn-small" onclick="removerServico(${s.id})">Remover</button>
+            ${s.descricao ? `<p>${s.descricao}</p>` : ""}
+            <p class="muted">${(s.opcoes || []).join(", ") || "Sem opções"}</p>
+            <div class="acoes">
+              <button class="btn btn-outline btn-small" onclick='editarServico(${JSON.stringify(s)}, ${l.id})'>Editar</button>
+              <button class="btn btn-outline btn-small" onclick="removerServico(${s.id})">Remover</button>
+            </div>
           </article>`).join(""));
       }
       document.getElementById("listaServicos").innerHTML = partes.join("");
@@ -292,18 +395,44 @@
     document.getElementById("formServico").addEventListener("submit", async e => {
       e.preventDefault();
       const storeId = document.getElementById("svLoja").value;
+      const body = {
+        nome: document.getElementById("svNome").value,
+        descricao: document.getElementById("svDesc").value.trim() || null,
+        preco: parseFloat(document.getElementById("svPreco").value),
+        opcoes: document.getElementById("svOpcoes").value.split(",").map(s => s.trim()).filter(Boolean),
+      };
       try {
-        await api(`/api/admin/lojas/${storeId}/servicos`, {
-          method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            nome: document.getElementById("svNome").value,
-            preco: parseFloat(document.getElementById("svPreco").value),
-            opcoes: document.getElementById("svOpcoes").value.split(",").map(s => s.trim()).filter(Boolean),
-          }),
-        });
-        e.target.reset(); carregarServicos();
-      } catch (err) { alert(err.message || "Não foi possível criar o serviço."); }
+        if (editandoServicoId) {
+          await api(`/api/admin/servicos/${editandoServicoId}`, {
+            method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body),
+          });
+        } else {
+          await api(`/api/admin/lojas/${storeId}/servicos`, {
+            method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body),
+          });
+        }
+        cancelarEdicaoServico(); e.target.reset(); carregarServicos();
+      } catch (err) { alert(err.message || "Erro ao salvar serviço."); }
     });
+    function editarServico(s, storeId) {
+      editandoServicoId = s.id;
+      document.getElementById("tituloFormServico").textContent = "Editar serviço";
+      document.getElementById("btnSalvarServico").textContent = "Salvar alterações";
+      document.getElementById("btnCancelarServico").hidden = false;
+      document.getElementById("svLoja").value = storeId;
+      document.getElementById("svNome").value = s.nome;
+      document.getElementById("svDesc").value = s.descricao || "";
+      document.getElementById("svPreco").value = s.preco;
+      document.getElementById("svOpcoes").value = (s.opcoes || []).join(", ");
+      window.scrollTo(0, 0);
+    }
+    function cancelarEdicaoServico() {
+      editandoServicoId = null;
+      document.getElementById("tituloFormServico").textContent = "Novo serviço";
+      document.getElementById("btnSalvarServico").textContent = "Adicionar";
+      document.getElementById("btnCancelarServico").hidden = true;
+      document.getElementById("formServico").reset();
+    }
     async function removerServico(id) {
       if (!confirm("Remover este serviço?")) return;
       try {
@@ -320,12 +449,13 @@
         const det = await api(`/api/profissionais/${l.slug}`);
         partes.push(`<h3>${l.nome}</h3>` + (det.produtos || []).map(p => `
           <article class="pedido-card">
-            ${p.imagem_url
-              ? `<img src="${p.imagem_url}" alt="" style="width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:.5rem;">`
-              : ""}
+            ${p.imagem_url ? `<img src="${p.imagem_url}" alt="" style="width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:.5rem;">` : ""}
             <header><h4>${p.emoji || ""} ${p.nome}</h4><strong>${moeda(p.preco)}</strong></header>
             <p>${p.descricao || "-"}</p>
-            <button class="btn btn-outline btn-small" onclick="removerProduto(${p.id})">Remover</button>
+            <div class="acoes">
+              <button class="btn btn-outline btn-small" onclick='editarProduto(${JSON.stringify(p)}, ${l.id})'>Editar</button>
+              <button class="btn btn-outline btn-small" onclick="removerProduto(${p.id})">Remover</button>
+            </div>
           </article>`).join(""));
       }
       document.getElementById("listaProdutos").innerHTML = partes.join("");
@@ -333,20 +463,46 @@
     document.getElementById("formProduto").addEventListener("submit", async e => {
       e.preventDefault();
       const storeId = document.getElementById("pLoja").value;
+      const body = {
+        nome: document.getElementById("pNome").value,
+        descricao: document.getElementById("pDesc").value.trim() || null,
+        preco: parseFloat(document.getElementById("pPreco").value),
+        emoji: document.getElementById("pEmoji").value || null,
+        imagem_url: document.getElementById("pImagem").value.trim() || null,
+      };
       try {
-        await api(`/api/admin/lojas/${storeId}/produtos`, {
-          method: "POST", headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            nome: document.getElementById("pNome").value,
-            descricao: document.getElementById("pDesc").value,
-            preco: parseFloat(document.getElementById("pPreco").value),
-            emoji: document.getElementById("pEmoji").value,
-            imagem_url: document.getElementById("pImagem").value.trim() || null,
-          }),
-        });
-        e.target.reset(); carregarProdutos();
-      } catch (err) { alert(err.message || "Não foi possível criar o produto."); }
+        if (editandoProdutoId) {
+          await api(`/api/admin/produtos/${editandoProdutoId}`, {
+            method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body),
+          });
+        } else {
+          await api(`/api/admin/lojas/${storeId}/produtos`, {
+            method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body),
+          });
+        }
+        cancelarEdicaoProduto(); e.target.reset(); carregarProdutos();
+      } catch (err) { alert(err.message || "Erro ao salvar produto."); }
     });
+    function editarProduto(p, storeId) {
+      editandoProdutoId = p.id;
+      document.getElementById("tituloFormProduto").textContent = "Editar produto";
+      document.getElementById("btnSalvarProduto").textContent = "Salvar alterações";
+      document.getElementById("btnCancelarProduto").hidden = false;
+      document.getElementById("pLoja").value = storeId;
+      document.getElementById("pNome").value = p.nome;
+      document.getElementById("pDesc").value = p.descricao || "";
+      document.getElementById("pPreco").value = p.preco;
+      document.getElementById("pEmoji").value = p.emoji || "";
+      document.getElementById("pImagem").value = p.imagem_url || "";
+      window.scrollTo(0, 0);
+    }
+    function cancelarEdicaoProduto() {
+      editandoProdutoId = null;
+      document.getElementById("tituloFormProduto").textContent = "Novo produto";
+      document.getElementById("btnSalvarProduto").textContent = "Adicionar";
+      document.getElementById("btnCancelarProduto").hidden = true;
+      document.getElementById("formProduto").reset();
+    }
     async function removerProduto(id) {
       if (!confirm("Remover este produto?")) return;
       try {
@@ -364,9 +520,10 @@
           <header><h4>${a.username}</h4><span class="status status-confirmado">admin</span></header>
           <p><strong>E-mail:</strong> ${a.email || "-"}</p>
           <p><strong>Loja:</strong> ${a.store_id ?? "super-admin"}</p>
+          ${EU && EU.store_id === null && a.id !== EU.id ? `
           <div class="acoes">
             <button class="btn btn-outline btn-small" onclick="removerAdmin(${a.id})">Remover admin</button>
-          </div>
+          </div>` : ""}
         </article>`).join("") || '<div class="empty-state">Nenhum admin.</div>';
     }
     async function removerAdmin(id) {
@@ -378,6 +535,7 @@
     }
     document.getElementById("formAdmin").addEventListener("submit", async e => {
       e.preventDefault();
+      const val = document.getElementById("aStoreSlug").value;
       try {
         await api("/api/admin/usuarios", {
           method: "POST", headers: {"Content-Type":"application/json"},
@@ -385,7 +543,7 @@
             username: document.getElementById("aUsername").value.trim(),
             password: document.getElementById("aSenha").value,
             email: document.getElementById("aEmail").value.trim() || null,
-            store_slug: document.getElementById("aStoreSlug").value.trim() || null,
+            store_slug: val === "__super__" ? null : val,
           }),
         });
         alert("Admin criado!");
