@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify, abort
+from flask import Blueprint, jsonify, abort, request
 from flask_login import login_required, current_user
-from app.extensions import db
-from app.models import Appointment, Order, Store, Service
+from app.extensions import db, limiter
+from app.models import Appointment, Order, Store, Service, Pergunta
 
 cli_bp = Blueprint("cliente", __name__, url_prefix="/api/me")
 
@@ -38,6 +38,8 @@ def meus_pedidos():
         out.append({
             "id": o.id, "store": store.nome if store else "-",
             "total": float(o.total), "status": o.status,
+            "motivo_negacao": o.motivo_negacao,
+            "mensagem_lojista": o.mensagem_lojista,
             "criado_em": o.criado_em.isoformat(),
             "itens": [{"nome": i.nome, "qtd": i.quantidade,
                        "preco": float(i.preco_unitario or 0)} for i in o.itens],
@@ -69,3 +71,42 @@ def cancelar_meu_pedido(order_id):
     o.status = "Cancelado"
     db.session.commit()
     return jsonify(ok=True)
+
+
+# ---------- PERGUNTAS DO CLIENTE ----------
+@cli_bp.get("/perguntas")
+@login_required
+def minhas_perguntas():
+    qs = (Pergunta.query
+          .filter_by(cliente_username=current_user.username)
+          .order_by(Pergunta.criado_em.desc()).all())
+    out = []
+    for q in qs:
+        store = Store.query.get(q.store_id)
+        out.append({
+            "id": q.id, "store": store.nome if store else "-",
+            "pergunta": q.pergunta, "resposta": q.resposta,
+            "respondido_em": q.respondido_em.isoformat() if q.respondido_em else None,
+            "criado_em": q.criado_em.isoformat(),
+        })
+    return jsonify(out)
+
+
+@cli_bp.post("/perguntas")
+@login_required
+@limiter.limit("10 per hour")
+def enviar_pergunta():
+    d = request.get_json() or {}
+    store_slug = d.get("store_slug")
+    texto = (d.get("pergunta") or "").strip()
+    if not store_slug or not texto:
+        return jsonify(error="Loja e pergunta obrigatórias"), 400
+
+    store = Store.query.filter_by(slug=store_slug, ativo=True).first()
+    if not store:
+        return jsonify(error="Loja não encontrada"), 404
+
+    p = Pergunta(cliente_username=current_user.username, store_id=store.id, pergunta=texto)
+    db.session.add(p)
+    db.session.commit()
+    return jsonify(id=p.id), 201
