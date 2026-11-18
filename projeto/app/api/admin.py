@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import current_user
+from datetime import datetime
 from app.extensions import db
 from app.models import Store, Service, Product, Appointment, Order, User, Pergunta
 from app.api._decorators import admin_required
@@ -179,6 +180,8 @@ def admin_agendamentos():
             "cliente": a.cliente_username, "data": a.data, "hora": a.hora,
             "tecnica": a.tecnica, "observacao": a.observacao,
             "status": a.status, "preco": float(a.preco or 0),
+            "motivo_negacao": a.motivo_negacao,
+            "mensagem_lojista": a.mensagem_lojista,
         })
     return jsonify(out)
 
@@ -190,9 +193,27 @@ def mudar_status_agendamento(ag_id):
     if current_user.store_id and a.store_id != current_user.store_id:
         return jsonify(error="Sem permissão"), 403
     d = request.get_json() or {}
-    a.status = d.get("status", a.status)
+    novo = d.get("status", a.status)
+    if novo == "Negado":
+        motivo = (d.get("motivo") or "").strip()
+        if not motivo:
+            return jsonify(error="Informe o motivo da negação"), 400
+        a.motivo_negacao = motivo
+    a.status = novo
     db.session.commit()
     return jsonify(ok=True, status=a.status)
+
+
+@admin_bp.patch("/agendamentos/<int:ag_id>/mensagem")
+@admin_required
+def mensagem_agendamento(ag_id):
+    a = Appointment.query.get_or_404(ag_id)
+    if current_user.store_id and a.store_id != current_user.store_id:
+        return jsonify(error="Sem permissão"), 403
+    d = request.get_json() or {}
+    a.mensagem_lojista = (d.get("mensagem") or "").strip() or None
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 # ================================================================
@@ -289,10 +310,8 @@ def criar_admin():
             return jsonify(error="Loja não encontrada"), 404
         store_id = store.id
 
-    # Admin de loja NÃO pode criar super-admin
     if current_user.store_id is not None and store_id is None:
         return jsonify(error="Admin de loja deve criar admins vinculados a uma loja"), 403
-    # Admin de loja só cria admin da própria loja
     if current_user.store_id is not None and store_id != current_user.store_id:
         return jsonify(error="Só é possível criar admin da própria loja"), 403
 
@@ -334,7 +353,7 @@ def deletar_admin(user_id):
 
 
 # ================================================================
-# PERGUNTAS (para admin/lojista responder)
+# PERGUNTAS
 # ================================================================
 @admin_bp.get("/perguntas")
 @admin_required
@@ -358,7 +377,6 @@ def admin_perguntas():
 @admin_bp.patch("/perguntas/<int:pergunta_id>")
 @admin_required
 def responder_pergunta(pergunta_id):
-    from datetime import datetime
     p = Pergunta.query.get_or_404(pergunta_id)
     if current_user.store_id and p.store_id != current_user.store_id:
         return jsonify(error="Sem permissão"), 403
