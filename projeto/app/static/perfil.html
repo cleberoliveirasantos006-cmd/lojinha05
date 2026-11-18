@@ -89,6 +89,7 @@
       });
     });
 
+    // ==================== AGENDAMENTOS ====================
     async function carregarAgendamentos() {
       const ags = await api("/api/me/agendamentos");
       const alvo = document.getElementById("listaAgendamentos");
@@ -102,15 +103,22 @@
           <p><strong>Quando:</strong> ${a.data} às ${a.hora}</p>
           <p><strong>Técnica:</strong> ${a.tecnica || "-"}</p>
           <p><strong>Valor:</strong> ${moeda(a.preco)}</p>
-          ${a.status === "Aguardando confirmação" ? `<button class="btn btn-outline btn-small" onclick="cancelarAgendamento(${a.id})">Cancelar solicitação</button>` : ""}
+          ${a.motivo_negacao ? `<p class="muted"><strong>Motivo da negação:</strong> ${a.motivo_negacao}</p>` : ""}
+          ${a.mensagem_lojista ? `<p class="muted"><strong>Mensagem da loja:</strong> ${a.mensagem_lojista}</p>` : ""}
+          ${a.status === "Aguardando confirmação"
+            ? `<button class="btn btn-outline btn-small" onclick="cancelarAgendamento(${a.id})">Cancelar solicitação</button>` : ""}
         </article>`).join("");
     }
+
     async function cancelarAgendamento(id) {
       if (!confirm("Cancelar este agendamento?")) return;
-      await fetch(`/api/me/agendamentos/${id}/cancelar`, { method: "PATCH", credentials: "include" });
-      carregarAgendamentos();
+      try {
+        await api(`/api/me/agendamentos/${id}/cancelar`, { method: "PATCH" });
+        carregarAgendamentos();
+      } catch (err) { alert(err.message || "Erro ao cancelar."); }
     }
 
+    // ==================== PEDIDOS ====================
     async function carregarPedidos() {
       const ps = await api("/api/me/pedidos");
       const alvo = document.getElementById("listaPedidos");
@@ -126,15 +134,20 @@
           <p class="muted">Feito em ${new Date(p.criado_em).toLocaleString("pt-BR")}</p>
           ${p.motivo_negacao ? `<p class="muted"><strong>Motivo da negação:</strong> ${p.motivo_negacao}</p>` : ""}
           ${p.mensagem_lojista ? `<p class="muted"><strong>Mensagem da loja:</strong> ${p.mensagem_lojista}</p>` : ""}
-          ${p.status === "Aguardando confirmação" ? `<button class="btn btn-outline btn-small" onclick="cancelarPedido(${p.id})">Cancelar pedido</button>` : ""}
+          ${p.status === "Aguardando confirmação"
+            ? `<button class="btn btn-outline btn-small" onclick="cancelarPedido(${p.id})">Cancelar pedido</button>` : ""}
         </article>`).join("");
     }
+
     async function cancelarPedido(id) {
       if (!confirm("Cancelar este pedido?")) return;
-      await fetch(`/api/me/pedidos/${id}/cancelar`, { method: "PATCH", credentials: "include" });
-      carregarPedidos();
+      try {
+        await api(`/api/me/pedidos/${id}/cancelar`, { method: "PATCH" });
+        carregarPedidos();
+      } catch (err) { alert(err.message || "Erro ao cancelar."); }
     }
 
+    // ==================== PERGUNTAS ====================
     async function carregarSelectLojas() {
       const lojas = await api("/api/profissionais");
       const sel = document.getElementById("pqLoja");
@@ -173,6 +186,7 @@
       } catch (err) { alert(err.message || "Erro ao enviar pergunta."); }
     });
 
+    // ==================== BOOT ====================
     (async () => {
       const u = await exigirLogin();
       if (!u) return;
