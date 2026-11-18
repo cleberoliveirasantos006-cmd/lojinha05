@@ -123,6 +123,8 @@
     let EU = null;
     let editandoServicoId = null;
     let editandoProdutoId = null;
+    let cacheServicos = {};
+    let cacheProdutos = {};
 
     async function api(url, opts = {}) {
       const r = await fetch(url, { credentials: "include", ...opts });
@@ -145,7 +147,6 @@
         .finally(() => { localStorage.removeItem("logado"); location.href = "/index.html"; });
     }
 
-    // Link de suporte
     api("/api/config/suporte").then(c => {
       if (c && c.url) {
         document.getElementById("suporteLink").href = c.url;
@@ -187,22 +188,54 @@
           <p><strong>Técnica:</strong> ${a.tecnica || "-"}</p>
           <p><strong>Observação:</strong> ${a.observacao || "-"}</p>
           <p><strong>Valor:</strong> ${moeda(a.preco)}</p>
+          ${a.motivo_negacao ? `<p class="muted"><strong>Motivo da negação:</strong> ${a.motivo_negacao}</p>` : ""}
+          ${a.mensagem_lojista ? `<p class="muted"><strong>Mensagem ao cliente:</strong> ${a.mensagem_lojista}</p>` : ""}
           <div class="acoes">
             ${a.status === "Aguardando confirmação" ? `
               <button class="btn btn-primary btn-small" onclick="mudarAg(${a.id},'Confirmado')">Confirmar</button>
-              <button class="btn btn-outline btn-small" onclick="mudarAg(${a.id},'Cancelado')">Cancelar</button>` : ""}
+              <button class="btn btn-outline btn-small" onclick="negarAgendamento(${a.id})">Negar</button>` : ""}
             ${a.status === "Confirmado" ? `
               <button class="btn btn-primary btn-small" onclick="mudarAg(${a.id},'Concluído')">Marcar como concluído</button>
-              <button class="btn btn-outline btn-small" onclick="mudarAg(${a.id},'Cancelado')">Cancelar</button>` : ""}
+              <button class="btn btn-outline btn-small" onclick="negarAgendamento(${a.id})">Cancelar com motivo</button>` : ""}
+            ${(a.status === "Confirmado" || a.status === "Concluído") ? `
+              <button class="btn btn-outline btn-small" onclick="enviarMensagemAgendamento(${a.id})">Enviar mensagem</button>` : ""}
           </div>
         </article>`).join("");
     }
+
     async function mudarAg(id, status) {
-      await api(`/api/admin/agendamentos/${id}`, {
-        method: "PATCH", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({status}),
-      });
-      carregarAgendamentos();
+      try {
+        await api(`/api/admin/agendamentos/${id}`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({status}),
+        });
+        carregarAgendamentos();
+      } catch (err) { alert(err.message || "Erro ao alterar agendamento."); }
+    }
+
+    async function negarAgendamento(id) {
+      const motivo = prompt("Digite o motivo da negação/cancelamento do agendamento:");
+      if (!motivo) return;
+      try {
+        await api(`/api/admin/agendamentos/${id}`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ status: "Negado", motivo }),
+        });
+        carregarAgendamentos();
+      } catch (err) { alert(err.message || "Erro ao negar agendamento."); }
+    }
+
+    async function enviarMensagemAgendamento(id) {
+      const msg = prompt("Mensagem ao cliente:");
+      if (!msg) return;
+      try {
+        await api(`/api/admin/agendamentos/${id}/mensagem`, {
+          method: "PATCH", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ mensagem: msg }),
+        });
+        alert("Mensagem enviada.");
+        carregarAgendamentos();
+      } catch (err) { alert(err.message || "Erro ao enviar mensagem."); }
     }
 
     // ==================== PEDIDOS ====================
@@ -230,10 +263,11 @@
               <button class="btn btn-primary btn-small" onclick="mudarPed(${p.id},'Entregue')">Marcar como entregue</button>
               <button class="btn btn-outline btn-small" onclick="negarPedido(${p.id})">Cancelar com motivo</button>` : ""}
             ${(p.status === "Confirmado" || p.status === "Entregue") ? `
-              <button class="btn btn-outline btn-small" onclick="enviarMensagem(${p.id})">Enviar mensagem</button>` : ""}
+              <button class="btn btn-outline btn-small" onclick="enviarMensagemPedido(${p.id})">Enviar mensagem</button>` : ""}
           </div>
         </article>`).join("");
     }
+
     async function mudarPed(id, status) {
       try {
         await api(`/api/admin/pedidos/${id}`, {
@@ -243,8 +277,9 @@
         carregarPedidos();
       } catch (err) { alert(err.message || "Erro ao alterar pedido."); }
     }
+
     async function negarPedido(id) {
-      const motivo = prompt("Digite o motivo da negação/cancelamento:");
+      const motivo = prompt("Digite o motivo da negação/cancelamento do pedido:");
       if (!motivo) return;
       try {
         await api(`/api/admin/pedidos/${id}`, {
@@ -254,7 +289,8 @@
         carregarPedidos();
       } catch (err) { alert(err.message || "Erro ao negar pedido."); }
     }
-    async function enviarMensagem(id) {
+
+    async function enviarMensagemPedido(id) {
       const msg = prompt("Mensagem ao cliente:");
       if (!msg) return;
       try {
@@ -286,6 +322,7 @@
             <button class="btn btn-primary btn-small" onclick="responderPergunta(${q.id})">Responder</button>` : ""}
         </article>`).join("");
     }
+
     async function responderPergunta(id) {
       const txt = prompt("Digite a resposta:");
       if (!txt) return;
@@ -320,6 +357,7 @@
           </div>
         </article>`).join("") || '<div class="empty-state">Nenhuma loja.</div>';
     }
+
     async function alternarLoja(id, ativoAtual) {
       try {
         await api(`/api/admin/lojas/${id}`, {
@@ -329,6 +367,7 @@
         carregarLojas();
       } catch (err) { alert(err.message || "Não foi possível alterar a loja."); }
     }
+
     async function removerLoja(id) {
       if (!confirm("Remover esta loja? Se houver pedidos/agendamentos, não será possível.")) return;
       try {
@@ -336,6 +375,7 @@
         carregarLojas();
       } catch (err) { alert(err.message || "Não foi possível remover a loja."); }
     }
+
     document.getElementById("formLoja").addEventListener("submit", async e => {
       e.preventDefault();
       try {
@@ -379,19 +419,21 @@
       const partes = [];
       for (const l of lojas) {
         const det = await api(`/api/profissionais/${l.slug}`);
+        (det.servicos || []).forEach(s => { cacheServicos[s.id] = { s, storeId: l.id }; });
         partes.push(`<h3>${l.nome}</h3>` + (det.servicos || []).map(s => `
           <article class="pedido-card">
             <header><h4>${s.nome}</h4><strong>${moeda(s.preco)}</strong></header>
             ${s.descricao ? `<p>${s.descricao}</p>` : ""}
             <p class="muted">${(s.opcoes || []).join(", ") || "Sem opções"}</p>
             <div class="acoes">
-              <button class="btn btn-outline btn-small" onclick='editarServico(${JSON.stringify(s)}, ${l.id})'>Editar</button>
+              <button class="btn btn-outline btn-small" onclick="editarServico(${s.id})">Editar</button>
               <button class="btn btn-outline btn-small" onclick="removerServico(${s.id})">Remover</button>
             </div>
           </article>`).join(""));
       }
       document.getElementById("listaServicos").innerHTML = partes.join("");
     }
+
     document.getElementById("formServico").addEventListener("submit", async e => {
       e.preventDefault();
       const storeId = document.getElementById("svLoja").value;
@@ -414,18 +456,23 @@
         cancelarEdicaoServico(); e.target.reset(); carregarServicos();
       } catch (err) { alert(err.message || "Erro ao salvar serviço."); }
     });
-    function editarServico(s, storeId) {
-      editandoServicoId = s.id;
+
+    function editarServico(id) {
+      const entry = cacheServicos[id];
+      if (!entry) return;
+      const s = entry.s;
+      editandoServicoId = id;
       document.getElementById("tituloFormServico").textContent = "Editar serviço";
       document.getElementById("btnSalvarServico").textContent = "Salvar alterações";
       document.getElementById("btnCancelarServico").hidden = false;
-      document.getElementById("svLoja").value = storeId;
+      document.getElementById("svLoja").value = entry.storeId;
       document.getElementById("svNome").value = s.nome;
       document.getElementById("svDesc").value = s.descricao || "";
       document.getElementById("svPreco").value = s.preco;
       document.getElementById("svOpcoes").value = (s.opcoes || []).join(", ");
       window.scrollTo(0, 0);
     }
+
     function cancelarEdicaoServico() {
       editandoServicoId = null;
       document.getElementById("tituloFormServico").textContent = "Novo serviço";
@@ -433,6 +480,7 @@
       document.getElementById("btnCancelarServico").hidden = true;
       document.getElementById("formServico").reset();
     }
+
     async function removerServico(id) {
       if (!confirm("Remover este serviço?")) return;
       try {
@@ -447,19 +495,21 @@
       const partes = [];
       for (const l of lojas) {
         const det = await api(`/api/profissionais/${l.slug}`);
+        (det.produtos || []).forEach(p => { cacheProdutos[p.id] = { p, storeId: l.id }; });
         partes.push(`<h3>${l.nome}</h3>` + (det.produtos || []).map(p => `
           <article class="pedido-card">
             ${p.imagem_url ? `<img src="${p.imagem_url}" alt="" style="width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:.5rem;">` : ""}
             <header><h4>${p.emoji || ""} ${p.nome}</h4><strong>${moeda(p.preco)}</strong></header>
             <p>${p.descricao || "-"}</p>
             <div class="acoes">
-              <button class="btn btn-outline btn-small" onclick='editarProduto(${JSON.stringify(p)}, ${l.id})'>Editar</button>
+              <button class="btn btn-outline btn-small" onclick="editarProduto(${p.id})">Editar</button>
               <button class="btn btn-outline btn-small" onclick="removerProduto(${p.id})">Remover</button>
             </div>
           </article>`).join(""));
       }
       document.getElementById("listaProdutos").innerHTML = partes.join("");
     }
+
     document.getElementById("formProduto").addEventListener("submit", async e => {
       e.preventDefault();
       const storeId = document.getElementById("pLoja").value;
@@ -483,12 +533,16 @@
         cancelarEdicaoProduto(); e.target.reset(); carregarProdutos();
       } catch (err) { alert(err.message || "Erro ao salvar produto."); }
     });
-    function editarProduto(p, storeId) {
-      editandoProdutoId = p.id;
+
+    function editarProduto(id) {
+      const entry = cacheProdutos[id];
+      if (!entry) return;
+      const p = entry.p;
+      editandoProdutoId = id;
       document.getElementById("tituloFormProduto").textContent = "Editar produto";
       document.getElementById("btnSalvarProduto").textContent = "Salvar alterações";
       document.getElementById("btnCancelarProduto").hidden = false;
-      document.getElementById("pLoja").value = storeId;
+      document.getElementById("pLoja").value = entry.storeId;
       document.getElementById("pNome").value = p.nome;
       document.getElementById("pDesc").value = p.descricao || "";
       document.getElementById("pPreco").value = p.preco;
@@ -496,6 +550,7 @@
       document.getElementById("pImagem").value = p.imagem_url || "";
       window.scrollTo(0, 0);
     }
+
     function cancelarEdicaoProduto() {
       editandoProdutoId = null;
       document.getElementById("tituloFormProduto").textContent = "Novo produto";
@@ -503,6 +558,7 @@
       document.getElementById("btnCancelarProduto").hidden = true;
       document.getElementById("formProduto").reset();
     }
+
     async function removerProduto(id) {
       if (!confirm("Remover este produto?")) return;
       try {
@@ -526,6 +582,7 @@
           </div>` : ""}
         </article>`).join("") || '<div class="empty-state">Nenhum admin.</div>';
     }
+
     async function removerAdmin(id) {
       if (!confirm("Remover este admin?")) return;
       try {
@@ -533,6 +590,7 @@
         carregarAdmins();
       } catch (err) { alert(err.message || "Não foi possível remover o admin."); }
     }
+
     document.getElementById("formAdmin").addEventListener("submit", async e => {
       e.preventDefault();
       const val = document.getElementById("aStoreSlug").value;
