@@ -79,6 +79,8 @@ class Appointment(db.Model):
     observacao = db.Column(db.Text)
     preco = db.Column(db.Numeric(10, 2))
     status = db.Column(db.String(40), default="Aguardando confirmação")
+    motivo_negacao = db.Column(db.Text)
+    mensagem_lojista = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     store = db.relationship("Store")
