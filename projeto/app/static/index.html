@@ -57,7 +57,16 @@
     </section>
   </main>
 
-  <footer><a class="brand" href="/index.html">✿ amora<span>beauty</span></a><p>Um espaço feito para celebrar sua beleza.</p></footer>
+  <footer>
+    <a class="brand" href="/index.html">✿ amora<span>beauty</span></a>
+    <p>Um espaço feito para celebrar sua beleza.</p>
+    <p><a id="suporteFooter" href="#" target="_blank">Reportar bug / Falar com suporte</a></p>
+    <script>
+      fetch("/api/config/suporte").then(r => r.json()).then(c => {
+        if (c && c.url) document.getElementById("suporteFooter").href = c.url;
+      }).catch(() => {});
+    </script>
+  </footer>
   <script src="/assets/js/script.js"></script>
 </body>
 </html>
