@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_login import current_user
 from app.extensions import db
-from app.models import Store, Service, Product, Appointment, Order, User
+from app.models import Store, Service, Product, Appointment, Order, User, Pergunta
 from app.api._decorators import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
@@ -34,13 +34,10 @@ def criar_loja():
     if Store.query.filter_by(slug=d["slug"]).first():
         return jsonify(error="Slug já existe"), 409
 
-    s = Store(
-        slug=d["slug"], nome=d["nome"], area=d.get("area"),
-        cidade=d.get("cidade"), bio=d.get("bio"), inicial=d.get("inicial"),
-        cor=d.get("cor"), instagram=d.get("instagram"),
-        whatsapp=d.get("whatsapp"), email_notificacao=d["email_notificacao"],
-        imagem_url=d.get("imagem_url"),
-    )
+    s = Store(slug=d["slug"], nome=d["nome"], area=d.get("area"),
+              cidade=d.get("cidade"), bio=d.get("bio"), inicial=d.get("inicial"),
+              cor=d.get("cor"), instagram=d.get("instagram"), whatsapp=d.get("whatsapp"),
+              email_notificacao=d["email_notificacao"], imagem_url=d.get("imagem_url"))
     db.session.add(s)
     db.session.commit()
     return jsonify(id=s.id), 201
@@ -54,8 +51,7 @@ def editar_loja(store_id):
     s = Store.query.get_or_404(store_id)
     d = request.get_json() or {}
     for campo in ("nome", "area", "cidade", "bio", "inicial", "cor",
-                  "instagram", "whatsapp", "email_notificacao", "ativo",
-                  "imagem_url"):
+                  "instagram", "whatsapp", "email_notificacao", "ativo", "imagem_url"):
         if campo in d:
             setattr(s, campo, d[campo])
     db.session.commit()
@@ -67,18 +63,10 @@ def editar_loja(store_id):
 def deletar_loja(store_id):
     if current_user.store_id:
         return jsonify(error="Admin de loja não pode deletar loja"), 403
-
     s = Store.query.get_or_404(store_id)
-
-    # Só permite excluir se não houver histórico vinculado
-    tem_pedidos = Order.query.filter_by(store_id=store_id).count() > 0
-    tem_agendamentos = Appointment.query.filter_by(store_id=store_id).count() > 0
-    if tem_pedidos or tem_agendamentos:
-        return jsonify(error=(
-            "Essa loja tem pedidos ou agendamentos registrados. "
-            "Desative-a em vez de removê-la, para não perder o histórico."
-        )), 409
-
+    if Order.query.filter_by(store_id=store_id).count() > 0 or \
+       Appointment.query.filter_by(store_id=store_id).count() > 0:
+        return jsonify(error="Essa loja tem pedidos/agendamentos. Desative-a em vez de remover."), 409
     db.session.delete(s)
     db.session.commit()
     return jsonify(ok=True)
@@ -96,11 +84,25 @@ def criar_servico(store_id):
     d = request.get_json() or {}
     if not d.get("nome") or d.get("preco") is None:
         return jsonify(error="nome e preco obrigatórios"), 400
-    sv = Service(store_id=store_id, nome=d["nome"],
+    sv = Service(store_id=store_id, nome=d["nome"], descricao=d.get("descricao"),
                  preco=d["preco"], opcoes=d.get("opcoes") or [])
     db.session.add(sv)
     db.session.commit()
     return jsonify(id=sv.id), 201
+
+
+@admin_bp.put("/servicos/<int:service_id>")
+@admin_required
+def editar_servico(service_id):
+    sv = Service.query.get_or_404(service_id)
+    if current_user.store_id and current_user.store_id != sv.store_id:
+        return jsonify(error="Sem permissão"), 403
+    d = request.get_json() or {}
+    for campo in ("nome", "descricao", "preco", "opcoes"):
+        if campo in d:
+            setattr(sv, campo, d[campo])
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @admin_bp.delete("/servicos/<int:service_id>")
@@ -126,12 +128,25 @@ def criar_produto(store_id):
     d = request.get_json() or {}
     if not d.get("nome") or d.get("preco") is None:
         return jsonify(error="nome e preco obrigatórios"), 400
-    p = Product(store_id=store_id, nome=d["nome"],
-                descricao=d.get("descricao"), preco=d["preco"],
-                emoji=d.get("emoji"), imagem_url=d.get("imagem_url"))
+    p = Product(store_id=store_id, nome=d["nome"], descricao=d.get("descricao"),
+                preco=d["preco"], emoji=d.get("emoji"), imagem_url=d.get("imagem_url"))
     db.session.add(p)
     db.session.commit()
     return jsonify(id=p.id), 201
+
+
+@admin_bp.put("/produtos/<int:product_id>")
+@admin_required
+def editar_produto(product_id):
+    p = Product.query.get_or_404(product_id)
+    if current_user.store_id and current_user.store_id != p.store_id:
+        return jsonify(error="Sem permissão"), 403
+    d = request.get_json() or {}
+    for campo in ("nome", "descricao", "preco", "emoji", "imagem_url"):
+        if campo in d:
+            setattr(p, campo, d[campo])
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @admin_bp.delete("/produtos/<int:product_id>")
@@ -196,6 +211,8 @@ def admin_pedidos():
             "id": o.id, "store": store.nome if store else "-",
             "cliente": o.cliente_username, "total": float(o.total),
             "status": o.status, "criado_em": o.criado_em.isoformat(),
+            "motivo_negacao": o.motivo_negacao,
+            "mensagem_lojista": o.mensagem_lojista,
             "itens": [{"nome": i.nome, "qtd": i.quantidade,
                        "preco": float(i.preco_unitario or 0)} for i in o.itens],
         })
@@ -209,9 +226,27 @@ def mudar_status_pedido(order_id):
     if current_user.store_id and o.store_id != current_user.store_id:
         return jsonify(error="Sem permissão"), 403
     d = request.get_json() or {}
-    o.status = d.get("status", o.status)
+    novo = d.get("status", o.status)
+    if novo == "Negado":
+        motivo = (d.get("motivo") or "").strip()
+        if not motivo:
+            return jsonify(error="Informe o motivo da negação"), 400
+        o.motivo_negacao = motivo
+    o.status = novo
     db.session.commit()
     return jsonify(ok=True, status=o.status)
+
+
+@admin_bp.patch("/pedidos/<int:order_id>/mensagem")
+@admin_required
+def mensagem_pedido(order_id):
+    o = Order.query.get_or_404(order_id)
+    if current_user.store_id and o.store_id != current_user.store_id:
+        return jsonify(error="Sem permissão"), 403
+    d = request.get_json() or {}
+    o.mensagem_lojista = (d.get("mensagem") or "").strip() or None
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 # ================================================================
@@ -225,9 +260,7 @@ def listar_usuarios():
     if role:
         q = q.filter_by(role=role)
     if current_user.store_id:
-        q = q.filter(
-            (User.store_id == current_user.store_id) | (User.id == current_user.id)
-        )
+        q = q.filter((User.store_id == current_user.store_id) | (User.id == current_user.id))
     return jsonify([{
         "id": u.id, "username": u.username, "email": u.email,
         "role": u.role, "store_id": u.store_id,
@@ -256,6 +289,10 @@ def criar_admin():
             return jsonify(error="Loja não encontrada"), 404
         store_id = store.id
 
+    # Admin de loja NÃO pode criar super-admin
+    if current_user.store_id is not None and store_id is None:
+        return jsonify(error="Admin de loja deve criar admins vinculados a uma loja"), 403
+    # Admin de loja só cria admin da própria loja
     if current_user.store_id is not None and store_id != current_user.store_id:
         return jsonify(error="Só é possível criar admin da própria loja"), 403
 
@@ -281,23 +318,6 @@ def trocar_minha_senha():
     return jsonify(ok=True)
 
 
-@admin_bp.patch("/usuarios/<int:user_id>/senha")
-@admin_required
-def redefinir_senha_de_outro(user_id):
-    if not current_user.is_super_admin:
-        return jsonify(error="Apenas super-admin pode redefinir senha de outro admin"), 403
-    alvo = User.query.get_or_404(user_id)
-    if alvo.role != "admin":
-        return jsonify(error="Alvo não é admin"), 400
-    d = request.get_json() or {}
-    nova = d.get("nova_senha") or ""
-    if len(nova) < 6:
-        return jsonify(error="Nova senha deve ter no mínimo 6 caracteres"), 400
-    alvo.set_password(nova)
-    db.session.commit()
-    return jsonify(ok=True)
-
-
 @admin_bp.delete("/usuarios/<int:user_id>")
 @admin_required
 def deletar_admin(user_id):
@@ -309,5 +329,44 @@ def deletar_admin(user_id):
     if alvo.role != "admin":
         return jsonify(error="Alvo não é admin"), 400
     db.session.delete(alvo)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+# ================================================================
+# PERGUNTAS (para admin/lojista responder)
+# ================================================================
+@admin_bp.get("/perguntas")
+@admin_required
+def admin_perguntas():
+    q = Pergunta.query
+    if current_user.store_id:
+        q = q.filter_by(store_id=current_user.store_id)
+    out = []
+    for p in q.order_by(Pergunta.criado_em.desc()).all():
+        store = Store.query.get(p.store_id)
+        out.append({
+            "id": p.id, "store": store.nome if store else "-",
+            "cliente": p.cliente_username, "pergunta": p.pergunta,
+            "resposta": p.resposta,
+            "respondido_em": p.respondido_em.isoformat() if p.respondido_em else None,
+            "criado_em": p.criado_em.isoformat(),
+        })
+    return jsonify(out)
+
+
+@admin_bp.patch("/perguntas/<int:pergunta_id>")
+@admin_required
+def responder_pergunta(pergunta_id):
+    from datetime import datetime
+    p = Pergunta.query.get_or_404(pergunta_id)
+    if current_user.store_id and p.store_id != current_user.store_id:
+        return jsonify(error="Sem permissão"), 403
+    d = request.get_json() or {}
+    resposta = (d.get("resposta") or "").strip()
+    if not resposta:
+        return jsonify(error="Resposta obrigatória"), 400
+    p.resposta = resposta
+    p.respondido_em = datetime.utcnow()
     db.session.commit()
     return jsonify(ok=True)
