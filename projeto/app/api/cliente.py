@@ -21,6 +21,8 @@ def meus_agendamentos():
             "servico": service.nome if service else "-",
             "tecnica": a.tecnica, "data": a.data, "hora": a.hora,
             "preco": float(a.preco or 0), "status": a.status,
+            "motivo_negacao": a.motivo_negacao,
+            "mensagem_lojista": a.mensagem_lojista,
             "criado_em": a.criado_em.isoformat(),
         })
     return jsonify(out)
