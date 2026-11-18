@@ -464,3 +464,12 @@ footer .brand { display: inline-block; margin-bottom: .5rem; }
   .section { padding: 0 1rem; }
   .topbar { padding: .6rem 1rem; }
 }
+
+.form-card select {
+  padding: .6rem .8rem;
+  border: 1px solid #eadbe2;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: .95rem;
+  background: #fff;
+}
