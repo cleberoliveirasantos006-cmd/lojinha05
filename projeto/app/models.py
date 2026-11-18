@@ -10,25 +10,19 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(120))
-    role = db.Column(db.String(20), default="customer")  # customer | admin
+    role = db.Column(db.String(20), default="customer")
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     store = db.relationship("Store", foreign_keys=[store_id], backref="admins")
 
-    def set_password(self, pwd):
-        self.password_hash = generate_password_hash(pwd)
-
-    def check_password(self, pwd):
-        return check_password_hash(self.password_hash, pwd)
+    def set_password(self, pwd): self.password_hash = generate_password_hash(pwd)
+    def check_password(self, pwd): return check_password_hash(self.password_hash, pwd)
 
     @property
-    def is_admin(self):
-        return self.role == "admin"
-
+    def is_admin(self): return self.role == "admin"
     @property
-    def is_super_admin(self):
-        return self.role == "admin" and self.store_id is None
+    def is_super_admin(self): return self.role == "admin" and self.store_id is None
 
 
 class Store(db.Model):
@@ -56,6 +50,7 @@ class Service(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
     nome = db.Column(db.String(120), nullable=False)
+    descricao = db.Column(db.Text)
     preco = db.Column(db.Numeric(10, 2), nullable=False)
     opcoes = db.Column(db.JSON, default=list)
 
@@ -98,6 +93,8 @@ class Order(db.Model):
     cliente_email = db.Column(db.String(120))
     total = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(40), default="Aguardando confirmação")
+    motivo_negacao = db.Column(db.Text)
+    mensagem_lojista = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     store = db.relationship("Store")
@@ -112,3 +109,16 @@ class OrderItem(db.Model):
     nome = db.Column(db.String(120))
     quantidade = db.Column(db.Integer, default=1)
     preco_unitario = db.Column(db.Numeric(10, 2))
+
+
+class Pergunta(db.Model):
+    __tablename__ = "perguntas"
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_username = db.Column(db.String(80), nullable=False)
+    store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
+    pergunta = db.Column(db.Text, nullable=False)
+    resposta = db.Column(db.Text)
+    respondido_em = db.Column(db.DateTime)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    store = db.relationship("Store")
