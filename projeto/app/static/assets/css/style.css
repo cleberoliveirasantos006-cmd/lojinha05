@@ -473,3 +473,13 @@ footer .brand { display: inline-block; margin-bottom: .5rem; }
   font-size: .95rem;
   background: #fff;
 }
+
+.status-negado { background: #fde2e2; color: #a02b2b; }
+.form-card select {
+  padding: .6rem .8rem;
+  border: 1px solid #eadbe2;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: .95rem;
+  background: #fff;
+}
