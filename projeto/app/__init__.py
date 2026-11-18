@@ -1,7 +1,7 @@
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, session
 from flask_cors import CORS
 from app.config import Config
-from app.extensions import db, migrate, login_manager
+from app.extensions import db, migrate, login_manager, limiter
 
 
 def create_app():
@@ -11,8 +11,14 @@ def create_app():
     CORS(app, supports_credentials=True, origins=["*"])
 
     db.init_app(app)
-    migrate.init_app(app, db)          # mantido para uso local, mas não obrigatório
+    migrate.init_app(app, db)
     login_manager.init_app(app)
+    limiter.init_app(app)
+
+    # Força sessão permanente (para expirar por inatividade)
+    @app.before_request
+    def tornar_sessao_permanente():
+        session.permanent = True
 
     from app.auth.routes import auth_bp
     from app.api.profissionais import prof_bp
@@ -24,13 +30,8 @@ def create_app():
     for bp in (auth_bp, prof_bp, ag_bp, ord_bp, cli_bp, admin_bp):
         app.register_blueprint(bp)
 
-    # ------------------------------------------------------------
-    # Cria automaticamente as tabelas que ainda não existem no banco.
-    # Substitui o "flask db upgrade" no Render (plano Free não tem Shell).
-    # NÃO altera tabelas já existentes — só cria as que faltam.
-    # ------------------------------------------------------------
     with app.app_context():
-        from app import models  # garante que todos os modelos sejam registrados
+        from app import models
         db.create_all()
 
     @app.route("/")
@@ -44,5 +45,9 @@ def create_app():
     @app.route("/health")
     def health():
         return {"status": "ok"}
+
+    @app.route("/api/config/suporte")
+    def suporte_url():
+        return {"url": app.config.get("SUPORTE_URL", "")}
 
     return app
