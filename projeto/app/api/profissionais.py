@@ -13,13 +13,13 @@ def _store_to_dict(s, incluir_itens=True):
     }
     if incluir_itens:
         data["servicos"] = [
-            {"id": sv.id, "nome": sv.nome, "preco": float(sv.preco), "opcoes": sv.opcoes or []}
+            {"id": sv.id, "nome": sv.nome, "descricao": sv.descricao,
+             "preco": float(sv.preco), "opcoes": sv.opcoes or []}
             for sv in s.servicos
         ]
         data["produtos"] = [
             {"id": p.id, "nome": p.nome, "descricao": p.descricao,
-             "preco": float(p.preco), "emoji": p.emoji,
-             "imagem_url": p.imagem_url}
+             "preco": float(p.preco), "emoji": p.emoji, "imagem_url": p.imagem_url}
             for p in s.produtos
         ]
     return data
